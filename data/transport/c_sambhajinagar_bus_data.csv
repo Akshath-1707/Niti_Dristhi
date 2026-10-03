@@ -1,0 +1,8 @@
+Route_ID,Origin,Destination,Frequency_or_Timings,Major_Via_Stops,Transit_Type
+B01,Central Bus Stand,Amalner,"06:15, 12:15, 14:00","Khultabad, Ellora Caves, Kannad",MSRTC Regional
+B02,Cidco Bus Stand,Waluj MIDC,Every 15 mins,"Baba Petrol Pump, Kranti Chowk",Smart Bus (ASCDCL)
+B03,Central Bus Stand,Ambajogai,09:00 (Daily),"Gevrai, Beed, Kej",MSRTC Regional
+B04,Railway Station,Chikhalthana Airport,Every 20 mins,"Kranti Chowk, Cidco",Smart Bus (ASCDCL)
+B05,Central Bus Stand,Amravati,"04:00, 23:15","Jalna, Chikhali, Akola",MSRTC Long Distance
+B06,Cidco Bus Stand,Ellora Caves,Every 30 mins,"Khultabad, Daulatabad Fort",Smart Bus / Tourist
+B07,Waluj MIDC,Railway Station,Every 15 mins,"Bajajnagar, Baba Petrol Pump",Smart Bus (ASCDCL)

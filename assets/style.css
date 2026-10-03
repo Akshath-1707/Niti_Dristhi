@@ -1,0 +1,422 @@
+/* ==========================================================================
+   NITI DRISHTI: Nordic Minimalist Slate & Deep Pine Design System (Option B)
+   ========================================================================== */
+
+:root {
+  --bg-nordic: #F1F5F9;
+  --card-white: #FFFFFF;
+  --border-slate: #CBD5E1;
+  --border-subtle: #E2E8F0;
+  
+  --pine-teal: #0F766E;
+  --pine-teal-dark: #115E59;
+  --pine-teal-light: #CCFBF1;
+  
+  --steel-cyan: #0284C7;
+  --steel-cyan-light: #E0F2FE;
+  
+  --sage-green: #16A34A;
+  --sage-green-light: #DCFCE7;
+  
+  --warm-ochre: #B45309;
+  --warm-ochre-light: #FEF3C7;
+  
+  --rust-crimson: #B91C1C;
+  --rust-crimson-light: #FEE2E2;
+  
+  --text-pitch: #020617;
+  --text-body: #1E293B;
+  --text-muted: #475569;
+  --text-light: #64748B;
+  
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-nordic);
+  color: var(--text-body);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --------------------------------------------------------------------------
+   Layout Containers
+   -------------------------------------------------------------------------- */
+.dashboard-container {
+  max-width: 1720px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+
+.executive-card {
+  background-color: var(--card-white);
+  border: 1px solid var(--border-slate);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  margin-bottom: 20px;
+}
+
+.executive-card:hover {
+  border-color: #94A3B8;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+}
+
+/* --------------------------------------------------------------------------
+   Header & Top Command Ribbon (Prominent & Clear)
+   -------------------------------------------------------------------------- */
+.platform-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-slate);
+  margin-bottom: 20px;
+}
+
+.command-ribbon {
+  background-color: var(--card-white);
+  border: 1px solid var(--pine-teal);
+  border-left: 5px solid var(--pine-teal);
+  border-radius: 12px;
+  padding: 16px 24px;
+  margin-bottom: 22px;
+  box-shadow: 0 3px 14px rgba(15, 118, 110, 0.08);
+}
+
+.ribbon-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--pine-teal);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.ribbon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-pitch);
+  margin-bottom: 6px;
+  display: block;
+  letter-spacing: 0.3px;
+}
+
+/* --------------------------------------------------------------------------
+   Clean Light-Mode Dropdowns (Fixing Contrast & Glitches)
+   -------------------------------------------------------------------------- */
+.Select-control {
+  background-color: #F8FAFC !important;
+  border: 1px solid var(--border-slate) !important;
+  border-radius: 8px !important;
+  color: var(--text-pitch) !important;
+  font-size: 13px !important;
+  height: 38px !important;
+}
+
+.Select-control:hover {
+  border-color: var(--pine-teal) !important;
+}
+
+.Select-placeholder,
+.Select--single > .Select-control .Select-value {
+  line-height: 36px !important;
+  color: var(--text-pitch) !important;
+  font-weight: 600 !important;
+}
+
+.Select-menu-outer {
+  background-color: #FFFFFF !important;
+  border: 1px solid var(--border-slate) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1) !important;
+  z-index: 100 !important;
+}
+
+.Select-option {
+  color: var(--text-body) !important;
+  font-size: 13px !important;
+  padding: 10px 14px !important;
+}
+
+.Select-option.is-focused,
+.Select-option:hover {
+  background-color: var(--pine-teal-light) !important;
+  color: var(--pine-teal-dark) !important;
+}
+
+.Select-option.is-selected {
+  background-color: var(--pine-teal) !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+}
+
+/* --------------------------------------------------------------------------
+   KPI Score Cockpit
+   -------------------------------------------------------------------------- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.kpi-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.kpi-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 0 0 6px 0;
+}
+
+.kpi-value {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--text-pitch);
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.kpi-badge {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kpi-desc {
+  margin: 6px 0 0 0;
+  font-size: 11px;
+  color: var(--text-light);
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------------------------------
+   Plain-English Callout Banners
+   -------------------------------------------------------------------------- */
+.plain-banner {
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
+.plain-banner-red {
+  background-color: var(--rust-crimson-light);
+  border-left: 4px solid var(--rust-crimson);
+  color: var(--rust-crimson);
+}
+
+.plain-banner-cyan {
+  background-color: var(--steel-cyan-light);
+  border-left: 4px solid var(--steel-cyan);
+  color: #0369A1;
+}
+
+.plain-banner-ochre {
+  background-color: var(--warm-ochre-light);
+  border-left: 4px solid var(--warm-ochre);
+  color: var(--warm-ochre);
+}
+
+.plain-banner-teal {
+  background-color: var(--pine-teal-light);
+  border-left: 4px solid var(--pine-teal);
+  color: var(--pine-teal-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Badge & Status Pills (No Emojis)
+   -------------------------------------------------------------------------- */
+.status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.status-pill-green {
+  background-color: var(--sage-green-light);
+  color: var(--sage-green);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+}
+
+.status-pill-cyan {
+  background-color: var(--steel-cyan-light);
+  color: var(--steel-cyan);
+  border: 1px solid rgba(2, 132, 199, 0.3);
+}
+
+.status-pill-red {
+  background-color: var(--rust-crimson-light);
+  color: var(--rust-crimson);
+  border: 1px solid rgba(185, 28, 28, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   Buttons & Search Input
+   -------------------------------------------------------------------------- */
+.btn-primary {
+  background-color: var(--pine-teal);
+  color: #FFFFFF;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--pine-teal-dark);
+}
+
+.btn-outline {
+  background-color: #FFFFFF;
+  color: var(--text-body);
+  border: 1px solid var(--border-slate);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-outline:hover {
+  border-color: var(--pine-teal);
+  color: var(--pine-teal);
+  background-color: var(--pine-teal-light);
+}
+
+.btn-pdf {
+  background-color: var(--sage-green-light);
+  color: var(--sage-green);
+  border: 1px solid rgba(22, 163, 74, 0.4);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-pdf:hover {
+  background-color: var(--sage-green);
+  color: #FFFFFF;
+}
+
+.search-input-field {
+  width: 100%;
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-slate);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-pitch);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.search-input-field:focus {
+  border-color: var(--pine-teal);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+}
+
+/* --------------------------------------------------------------------------
+   Smooth RAG Typewriter Streaming (Flicker-Free)
+   -------------------------------------------------------------------------- */
+.streaming-text-box {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-slate);
+  border-radius: 10px;
+  padding: 22px 26px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text-body);
+  min-height: 140px;
+  white-space: pre-wrap;
+  font-family: var(--font-main);
+}
+
+.cursor-blink {
+  display: inline-block;
+  color: var(--pine-teal);
+  font-weight: 900;
+  animation: blink 0.8s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* --------------------------------------------------------------------------
+   Agentic Function Execution & Thinking Box
+   -------------------------------------------------------------------------- */
+.thinking-container {
+  background-color: #F8FAFC;
+  border: 1px solid var(--pine-teal);
+  border-left: 4px solid var(--pine-teal);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--pine-teal);
+  letter-spacing: 0.5px;
+}
+
+.pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--pine-teal);
+  box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.7);
+  animation: pulse-ring 1.4s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  display: inline-block;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.7); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(15, 118, 110, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(15, 118, 110, 0); }
+}
+
+.thinking-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
