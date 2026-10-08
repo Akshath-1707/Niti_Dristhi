@@ -27,6 +27,7 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
-# Temporary outputs
+# Temporary outputs & reference archives
 *.tmp
 *.log
+teammate_reference/

@@ -24,10 +24,22 @@ warnings.filterwarnings("ignore")
 # ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 
-# Import analytics and RAG modules
+# Import analytics, RAG, and cognitive reasoning modules
 from backend.analytics.readiness_index import EducationReadinessCalculator
 from backend.analytics.forecasting import EducationForecaster
 from backend.rag.pdf_exporter import generate_policy_pdf
+from backend.analytics.geocoding import assign_school_coordinates, create_gis_infrastructure_map
+
+# Cognitive Decision Support Modules (CDSS)
+from backend.core.config import BENCHMARKS, DEFAULT_WEIGHTS, PRIORITY_THRESHOLDS
+from backend.utils.data_quality import audit_school_record
+from backend.reasoning.gaps import analyze_school_infrastructure_gaps
+from backend.reasoning.decision_engine import formulate_phased_action_plan
+from backend.reasoning.explanation import (
+    generate_causal_why_factors,
+    generate_citizen_explanation,
+    generate_administrative_narrative
+)
 
 try:
     from backend.rag.service import generate_education_policy_brief
@@ -73,6 +85,7 @@ else:
 # Run Readiness Index Engine
 calc = EducationReadinessCalculator()
 df = calc.evaluate_schools(df_raw)
+df = assign_school_coordinates(df)
 district_summary = calc.get_district_summary(df)
 
 # Load 2021-2037 Forecast Data (anchored to exact 278,945 actual baseline)
@@ -102,6 +115,11 @@ tier_options = [
     {"label": "Critical Attention Required (< 55)", "value": "CRITICAL_INTERVENTION"},
     {"label": "Developing Needs (55 - 74)", "value": "DEVELOPING_NEEDS"},
     {"label": "Optimal / Resilient (>= 75)", "value": "OPTIMAL_RESILIENT"},
+]
+
+school_select_options = [
+    {"label": f"{r['school_name']} (UDISE: {r['udise_code']})", "value": str(r["udise_code"])}
+    for _, r in df.sort_values("total_enrolment", ascending=False).iterrows()
 ]
 
 # ---------------------------------------------------------------------------
@@ -163,6 +181,20 @@ app.layout = html.Div(
         ),
 
         # ===================================================================
+        # COGNITIVE DECISION SUPPORT: MULTI-PERSONA PORTAL NAVIGATION
+        # ===================================================================
+        html.Div(
+            className="portal-nav-bar",
+            children=[
+                html.Span("ACTIVE PORTAL VIEW:", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_MUTED, "letterSpacing": "0.5px", "marginLeft": "4px"}),
+                html.Button("🏛️ Public Citizen View", id="portal-tab-citizen", n_clicks=0, className="portal-tab-btn portal-tab-btn-active"),
+                html.Button("🏫 School Administrator Portal", id="portal-tab-school", n_clicks=0, className="portal-tab-btn"),
+                html.Button("📋 Government Administrator Portal", id="portal-tab-govt", n_clicks=0, className="portal-tab-btn"),
+                dcc.Store(id="active-portal-store", data="citizen"),
+            ]
+        ),
+
+        # ===================================================================
         # TOP COMMAND FILTER RIBBON (Moved to Top — Fixes Overshadowing)
         # ===================================================================
         html.Div(
@@ -216,6 +248,145 @@ app.layout = html.Div(
                         ]),
                     ]
                 )
+            ]
+        ),
+
+        # ===================================================================
+        # GOVERNMENT ADMIN "WHAT-IF" SIMULATION SANDBOX (Dynamic Weight Recalibration)
+        # ===================================================================
+        html.Div(
+            id="section-govt-sim-sandbox",
+            className="sandbox-container",
+            style={"display": "none"},
+            children=[
+                html.Div(
+                    style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "12px", "flexWrap": "wrap", "gap": "10px"},
+                    children=[
+                        html.Div([
+                            html.Span("GOVERNMENT DECISION SUPPORT: WHAT-IF SIMULATION SANDBOX", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_CYAN, "letterSpacing": "0.5px"}),
+                            html.H4("Dynamic Multi-Criteria Weight Recalibration & Capital Infrastructure Simulation", style={"margin": "2px 0 0 0", "fontSize": "15px", "color": COLOR_PITCH}),
+                        ]),
+                        html.Span("COGNITIVE WHAT-IF ENGINE", className="status-pill status-pill-cyan")
+                    ]
+                ),
+                html.P(
+                    "Simulate capital classroom infusion and adjust statutory pillar weights on the fly. Watch the District Readiness Score and the 2037 Classroom Deficit recalculate live across all charts.",
+                    style={"fontSize": "12.5px", "color": COLOR_MUTED, "marginBottom": "14px"}
+                ),
+                html.Div(
+                    style={"display": "grid", "gridTemplateColumns": "repeat(5, 1fr)", "gap": "16px"},
+                    children=[
+                        html.Div([
+                            html.Label("Capital Classroom Infusion", style={"fontSize": "11.5px", "fontWeight": "700", "color": COLOR_PITCH}),
+                            dcc.Slider(id="sim-classroom-slider", min=0, max=1000, step=50, value=0, marks={0: "+0", 500: "+500", 1000: "+1k"}, tooltip={"placement": "bottom", "always_visible": False})
+                        ]),
+                        html.Div([
+                            html.Label("Equity Weight (w_E)", style={"fontSize": "11.5px", "fontWeight": "700", "color": COLOR_PITCH}),
+                            dcc.Slider(id="sim-w-equity", min=0.10, max=0.40, step=0.05, value=0.25, marks={0.1: "0.1", 0.25: "0.25", 0.4: "0.4"}, tooltip={"placement": "bottom", "always_visible": False})
+                        ]),
+                        html.Div([
+                            html.Label("Promotion Weight (w_P)", style={"fontSize": "11.5px", "fontWeight": "700", "color": COLOR_PITCH}),
+                            dcc.Slider(id="sim-w-promo", min=0.10, max=0.40, step=0.05, value=0.30, marks={0.1: "0.1", 0.3: "0.3", 0.4: "0.4"}, tooltip={"placement": "bottom", "always_visible": False})
+                        ]),
+                        html.Div([
+                            html.Label("Retention Weight (w_R)", style={"fontSize": "11.5px", "fontWeight": "700", "color": COLOR_PITCH}),
+                            dcc.Slider(id="sim-w-ret", min=0.10, max=0.40, step=0.05, value=0.25, marks={0.1: "0.1", 0.25: "0.25", 0.4: "0.4"}, tooltip={"placement": "bottom", "always_visible": False})
+                        ]),
+                        html.Div([
+                            html.Label("Capacity Weight (w_C)", style={"fontSize": "11.5px", "fontWeight": "700", "color": COLOR_PITCH}),
+                            dcc.Slider(id="sim-w-cap", min=0.10, max=0.40, step=0.05, value=0.20, marks={0.1: "0.1", 0.2: "0.2", 0.4: "0.4"}, tooltip={"placement": "bottom", "always_visible": False})
+                        ]),
+                    ]
+                )
+            ]
+        ),
+
+        # ===================================================================
+        # SCHOOL ADMINISTRATOR PORTAL: DATA ENTRY & DIAGNOSTIC AUDIT
+        # ===================================================================
+        html.Div(
+            id="section-school-admin-view",
+            className="executive-card",
+            style={"display": "none", "border": f"1px solid {COLOR_PINE}", "marginBottom": "20px"},
+            children=[
+                html.Div(
+                    style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "marginBottom": "14px", "flexWrap": "wrap", "gap": "10px"},
+                    children=[
+                        html.Div([
+                            html.Span("INSTITUTIONAL DATA ENTRY & VERIFICATION PORTAL", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_PINE, "letterSpacing": "0.5px"}),
+                            html.H3("School Administrator Facility Audit & Live Diagnostic Intake", style={"margin": "2px 0 0 0", "fontSize": "17px", "fontWeight": "800", "color": COLOR_PITCH}),
+                            html.P("Select a school from the district registry to inspect and update, or enter new capacity data to run an automated Data Quality & Completeness Audit.", style={"margin": "4px 0 0 0", "fontSize": "12.5px", "color": COLOR_MUTED})
+                        ]),
+                        html.Span("PRINCIPAL PORTAL ACTIVE", className="status-pill status-pill-green")
+                    ]
+                ),
+
+                # School Pre-fill Selector
+                html.Div(
+                    style={"marginBottom": "16px"},
+                    children=[
+                        html.Label("Select Registered School to Pre-fill & Audit:", className="filter-label"),
+                        dcc.Dropdown(
+                            id="school-admin-select-dropdown",
+                            options=school_select_options[:150],
+                            placeholder="Choose a school from the district registry to pre-fill its official metrics...",
+                            clearable=True
+                        )
+                    ]
+                ),
+
+                # School Form Grid
+                html.Div(
+                    style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "14px", "marginBottom": "16px"},
+                    children=[
+                        html.Div([
+                            html.Label("School Name", className="filter-label"),
+                            dcc.Input(id="input-sch-name", type="text", className="search-input-field", placeholder="e.g. Z.P. High School")
+                        ]),
+                        html.Div([
+                            html.Label("UDISE Code (11 Digits)", className="filter-label"),
+                            dcc.Input(id="input-sch-udise", type="number", className="search-input-field", placeholder="e.g. 27191001234")
+                        ]),
+                        html.Div([
+                            html.Label("Total Active Enrolment", className="filter-label"),
+                            dcc.Input(id="input-sch-enrol", type="number", className="search-input-field", placeholder="e.g. 350")
+                        ]),
+                        html.Div([
+                            html.Label("Boys Enrolment", className="filter-label"),
+                            dcc.Input(id="input-sch-boys", type="number", className="search-input-field", placeholder="e.g. 180")
+                        ]),
+                        html.Div([
+                            html.Label("Girls Enrolment", className="filter-label"),
+                            dcc.Input(id="input-sch-girls", type="number", className="search-input-field", placeholder="e.g. 170")
+                        ]),
+                        html.Div([
+                            html.Label("Functional Classrooms", className="filter-label"),
+                            dcc.Input(id="input-sch-rooms", type="number", className="search-input-field", placeholder="e.g. 8")
+                        ]),
+                        html.Div([
+                            html.Label("Total Teaching Staff", className="filter-label"),
+                            dcc.Input(id="input-sch-teachers", type="number", className="search-input-field", placeholder="e.g. 10")
+                        ]),
+                        html.Div([
+                            html.Label("Promotion Pass Rate (%)", className="filter-label"),
+                            dcc.Input(id="input-sch-promo", type="number", className="search-input-field", placeholder="e.g. 85.5")
+                        ]),
+                        html.Div([
+                            html.Label("Pending Remedial Students", className="filter-label"),
+                            dcc.Input(id="input-sch-pend", type="number", className="search-input-field", placeholder="e.g. 25")
+                        ]),
+                    ]
+                ),
+
+                html.Div(
+                    style={"display": "flex", "gap": "12px", "marginBottom": "16px"},
+                    children=[
+                        html.Button("Run Data Quality & Diagnostic Audit", id="btn-sch-audit", n_clicks=0, className="btn-primary"),
+                    ]
+                ),
+
+                # Output of Audit & Phased Plan
+                html.Div(id="school-audit-output-container")
             ]
         ),
 
@@ -397,6 +568,37 @@ app.layout = html.Div(
                         dcc.Graph(id="pillar-radar-chart", config={"displayModeBar": False}, style={"height": "300px"})
                     ]
                 ),
+            ]
+        ),
+
+        # ===================================================================
+        # SECTION 2.5: INTERACTIVE INFRASTRUCTURE GIS MAP (Chhatrapati Sambhajinagar)
+        # ===================================================================
+        html.Div(
+            className="executive-card",
+            children=[
+                html.Div(
+                    style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "12px", "flexWrap": "wrap", "gap": "10px"},
+                    children=[
+                        html.Div([
+                            html.Span("GEOSPATIAL DECISION INTELLIGENCE • WARD MAPPING", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_PINE, "letterSpacing": "0.5px"}),
+                            html.H3("Interactive Infrastructure GIS Map • Chhatrapati Sambhajinagar", style={"margin": "2px 0 0 0", "fontSize": "17px", "fontWeight": "800", "color": COLOR_PITCH}),
+                            html.P("Geospatial distribution of 954 institutions across URC-1 and URC-2. Marker color reflects Priority Tier; marker radius scales with student enrollment.", style={"margin": "3px 0 0 0", "fontSize": "12.5px", "color": COLOR_MUTED})
+                        ]),
+                        html.Div(
+                            style={"display": "flex", "alignItems": "center", "gap": "8px"},
+                            children=[
+                                html.Span(id="map-school-count-badge", className="status-pill status-pill-cyan"),
+                                html.Span("CLICK PIN TO INSPECT DOSSIER", className="status-pill status-pill-green")
+                            ]
+                        )
+                    ]
+                ),
+                dcc.Graph(
+                    id="gis-infrastructure-map",
+                    config={"displayModeBar": True, "scrollZoom": True},
+                    style={"borderRadius": "8px", "overflow": "hidden", "border": f"1px solid {COLOR_BORDER}"}
+                )
             ]
         ),
 
@@ -648,6 +850,9 @@ app.layout = html.Div(
     Output("forecast-envelope-chart", "figure"),
     Output("vulnerability-scatter-chart", "figure"),
     Output("pillar-radar-chart", "figure"),
+    # GIS Infrastructure Map
+    Output("gis-infrastructure-map", "figure"),
+    Output("map-school-count-badge", "children"),
     # Table & Search
     Output("school-data-table", "data"),
     Output("table-row-count", "children"),
@@ -657,9 +862,14 @@ app.layout = html.Div(
     Input("filter-mgmt", "value"),
     Input("filter-category", "value"),
     Input("filter-tier", "value"),
-    Input("school-search-input", "value")
+    Input("school-search-input", "value"),
+    Input("sim-classroom-slider", "value"),
+    Input("sim-w-equity", "value"),
+    Input("sim-w-promo", "value"),
+    Input("sim-w-ret", "value"),
+    Input("sim-w-cap", "value")
 )
-def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selected_tier, search_query):
+def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selected_tier, search_query, sim_classrooms, w_eq, w_pr, w_ret, w_cap):
     filtered = df.copy()
 
     if selected_block and selected_block != "ALL" and "block_name" in filtered.columns:
@@ -674,7 +884,7 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
     if selected_tier and selected_tier != "ALL" and "priority_tier" in filtered.columns:
         filtered = filtered[filtered["priority_tier"] == selected_tier]
 
-    # Search filter & Facility Inspector Card
+    # Search filter & Cognitive Explainable Decision Dossier Card
     inspector_card = None
     if search_query and search_query.strip():
         q = search_query.strip().lower()
@@ -691,54 +901,89 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
             s_code = top_school.get("udise_code", "N/A")
             s_block = top_school.get("block_name", "N/A")
             s_enrol = int(top_school.get("total_enrolment", 0))
-            s_promo = float(top_school.get("promotion_rate", 0.0))
-            s_pend = int(top_school.get("pending_students", 0))
             s_score = float(top_school.get("readiness_score", 0.0))
-            s_tier = top_school.get("priority_tier", "DEVELOPING_NEEDS")
 
-            badge_color = COLOR_CRIMSON if s_score < 55 else (COLOR_OCHRE if s_score < 75 else COLOR_SAGE)
+            # Run Cognitive Decision & Explainability Engine (XAI)
+            school_dict = top_school.to_dict()
+            dossier = formulate_phased_action_plan(school_dict)
+            gaps = dossier["gaps"]
+            why_factors = generate_causal_why_factors(dossier)
+            citizen_exp = generate_citizen_explanation(dossier)
+
+            badge_color = dossier["priority_color"]
+            priority_label = dossier["overall_priority"]
+            dominant = dossier["dominant_bottleneck"]
+
+            why_rows = [
+                html.Div(
+                    className="why-factor-row",
+                    children=[
+                        html.Span("•", style={"color": badge_color, "fontWeight": "bold", "fontSize": "13px"}),
+                        html.Span(f, style={"color": COLOR_PITCH, "fontSize": "12px"})
+                    ]
+                )
+                for f in why_factors
+            ]
 
             inspector_card = html.Div(
-                style={
-                    "backgroundColor": "#FFFFFF",
-                    "border": f"1px solid {badge_color}",
-                    "borderLeft": f"5px solid {badge_color}",
-                    "borderRadius": "10px",
-                    "padding": "16px 20px",
-                    "boxShadow": "0 2px 10px rgba(0,0,0,0.06)",
-                    "marginBottom": "16px"
-                },
+                className="dossier-card",
+                style={"borderLeft": f"5px solid {badge_color}"},
                 children=[
                     html.Div(
-                        style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start"},
+                        style={"display": "flex", "justifyContent": "space-between", "alignItems": "flex-start", "flexWrap": "wrap", "gap": "10px"},
                         children=[
                             html.Div([
-                                html.Span("SELECTED SCHOOL AUDIT PASSPORT", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_PINE, "letterSpacing": "0.5px"}),
-                                html.H4(f"{s_name}", style={"margin": "4px 0 2px 0", "fontSize": "16px", "color": COLOR_PITCH}),
-                                html.P(f"UDISE Code: {s_code} • Area: {s_block} • Category: {top_school.get('school_category', 'Primary')}", style={"margin": "0", "fontSize": "12px", "color": COLOR_MUTED})
+                                html.Span("EXPLAINABLE COGNITIVE DECISION DOSSIER", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_PINE, "letterSpacing": "0.5px"}),
+                                html.H4(f"{s_name}", style={"margin": "4px 0 2px 0", "fontSize": "17px", "fontWeight": "800", "color": COLOR_PITCH}),
+                                html.P(f"UDISE Code: {s_code} • Area: {s_block} • Dominant Constraint: {dominant}", style={"margin": "0", "fontSize": "12px", "color": COLOR_MUTED})
                             ]),
                             html.Div(
                                 style={"textAlign": "right"},
                                 children=[
-                                    html.Span(f"Score: {s_score}/100", style={"fontSize": "15px", "fontWeight": "900", "color": badge_color, "display": "block"}),
-                                    html.Span(s_tier.replace("_", " "), style={"fontSize": "11px", "color": COLOR_MUTED, "fontWeight": "700"})
+                                    html.Span(f"Score: {s_score}/100", style={"fontSize": "16px", "fontWeight": "900", "color": badge_color, "display": "block"}),
+                                    html.Span(f"PRIORITY: {priority_label}", className=f"status-pill {'status-pill-red' if priority_label == 'CRITICAL' else ('status-pill-amber' if priority_label == 'HIGH' else 'status-pill-green')}")
                                 ]
                             )
                         ]
                     ),
+                    # Physical Gaps Grid
                     html.Div(
-                        style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "14px", "marginTop": "12px", "borderTop": f"1px solid {COLOR_BORDER}", "paddingTop": "10px"},
+                        style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginTop": "12px", "borderTop": f"1px solid {COLOR_BORDER}", "paddingTop": "12px"},
                         children=[
-                            html.Div([html.Span("Enrolment", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5(f"{s_enrol:,} Students", style={"margin": "2px 0 0 0", "fontSize": "14px", "color": COLOR_PITCH})]),
-                            html.Div([html.Span("Pass Rate", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5(f"{s_promo:.1f}%", style={"margin": "2px 0 0 0", "fontSize": "14px", "color": COLOR_PITCH})]),
-                            html.Div([html.Span("Held Back", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5(f"{s_pend:,} Students", style={"margin": "2px 0 0 0", "fontSize": "14px", "color": COLOR_CRIMSON if s_pend > 0 else COLOR_PITCH})]),
-                            html.Div([html.Span("Recommended Action", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5("Bridge Remedial Camp" if s_score < 70 else "Maintain Standards", style={"margin": "2px 0 0 0", "fontSize": "13px", "color": COLOR_PINE})])
+                            html.Div([html.Span("Total Students", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5(f"{s_enrol:,}", style={"margin": "2px 0 0 0", "fontSize": "14px", "color": COLOR_PITCH})]),
+                            html.Div([html.Span("Teacher Gap (ΔT)", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5(f"+{gaps['teacher_gap']} Teachers" if gaps['teacher_gap'] > 0 else "Compliant", style={"margin": "2px 0 0 0", "fontSize": "14px", "color": COLOR_CRIMSON if gaps['teacher_gap'] > 0 else COLOR_SAGE})]),
+                            html.Div([html.Span("Classroom Gap (ΔC)", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5(f"+{gaps['classroom_gap']} Rooms" if gaps['classroom_gap'] > 0 else "Compliant", style={"margin": "2px 0 0 0", "fontSize": "14px", "color": COLOR_CRIMSON if gaps['classroom_gap'] > 0 else COLOR_SAGE})]),
+                            html.Div([html.Span("Capacity Status", style={"fontSize": "11px", "color": COLOR_MUTED}), html.H5("SURGE OVERFLOW" if gaps['is_capacity_saturated'] else "Capacity Safe", style={"margin": "2px 0 0 0", "fontSize": "13px", "color": COLOR_CRIMSON if gaps['is_capacity_saturated'] else COLOR_PINE})])
+                        ]
+                    ),
+                    # Plain-English Citizen Box
+                    html.Div(
+                        style={"backgroundColor": "#F8FAFC", "border": f"1px solid {COLOR_BORDER}", "borderRadius": "8px", "padding": "12px 14px", "marginTop": "12px"},
+                        children=[
+                            html.Span("Plain-Language Explanation for Citizens & Parents:", style={"fontSize": "11.5px", "fontWeight": "800", "color": COLOR_PINE, "display": "block", "marginBottom": "4px"}),
+                            html.P(citizen_exp, style={"margin": "0", "fontSize": "12.5px", "color": COLOR_PITCH, "lineHeight": "1.5"})
+                        ]
+                    ),
+                    # Causal "WHY" factors
+                    html.Div(
+                        style={"marginTop": "12px"},
+                        children=[
+                            html.Span("Causal 'WHY' Factor Trail (Primary Drivers):", style={"fontSize": "11.5px", "fontWeight": "800", "color": COLOR_MUTED, "display": "block", "marginBottom": "6px"}),
+                            html.Div(why_rows)
+                        ]
+                    ),
+                    # Phased Action Recommendation
+                    html.Div(
+                        style={"marginTop": "10px", "paddingTop": "8px", "borderTop": f"1px dashed {COLOR_BORDER}", "fontSize": "12px"},
+                        children=[
+                            html.Span("First Recommended Action: ", style={"fontWeight": "800", "color": COLOR_PINE}),
+                            html.Span(dossier['phased_plan']['phase_1_immediate'][0], style={"color": COLOR_PITCH})
                         ]
                     )
                 ]
             )
 
-    # 1. DYNAMIC CALCULATIONS FOR FILTERED SUBSET
+    # 1. DYNAMIC CALCULATIONS FOR FILTERED SUBSET (WITH WHAT-IF RECALIBRATION)
     active_subset = filtered[filtered["is_operational"] == True] if "is_operational" in filtered.columns else filtered
     total_schools = len(filtered)
     open_schools = len(active_subset)
@@ -748,13 +993,32 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
     remedial_students = int(filtered["pending_students"].sum()) if "pending_students" in filtered.columns else 0
 
     gpi = round(total_girls / max(total_boys, 1), 2)
-    avg_score = round(float(active_subset["readiness_score"].mean()), 1) if not active_subset.empty else 0.0
 
-    # 2037 Deficit for filtered subset
+    # Multi-Criteria Weight Recalibration
+    sim_classrooms = int(sim_classrooms or 0)
+    w_eq = float(w_eq or 0.25)
+    w_pr = float(w_pr or 0.30)
+    w_ret = float(w_ret or 0.25)
+    w_cap = float(w_cap or 0.20)
+    tot_w = max(0.001, w_eq + w_pr + w_ret + w_cap)
+    w_eq, w_pr, w_ret, w_cap = w_eq / tot_w, w_pr / tot_w, w_ret / tot_w, w_cap / tot_w
+
+    if not active_subset.empty and "score_equity" in active_subset.columns:
+        composite_series = (
+            active_subset["score_equity"] * w_eq +
+            active_subset["score_promotion"] * w_pr +
+            active_subset["score_retention"] * w_ret +
+            active_subset["score_capacity"] * w_cap
+        )
+        avg_score = round(float(composite_series.mean()), 1)
+    else:
+        avg_score = round(float(active_subset["readiness_score"].mean()), 1) if not active_subset.empty else 0.0
+
+    # 2037 Deficit for filtered subset with live capital infusion reduction
     baseline_classrooms = int(total_students / 30.0)
     projected_2037_students = int(total_students * (350573 / 278945)) if total_students > 0 else 0
     projected_classrooms = int(projected_2037_students / 30.0)
-    deficit_classrooms = max(0, projected_classrooms - baseline_classrooms)
+    deficit_classrooms = max(0, projected_classrooms - (baseline_classrooms + sim_classrooms))
 
     # 2. RADIAL GAUGE FIGURE
     gauge_color = COLOR_SAGE if avg_score >= 75 else (COLOR_OCHRE if avg_score >= 55 else COLOR_CRIMSON)
@@ -917,7 +1181,11 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
         height=300
     )
 
-    # 8. TABLE DATA
+    # 8. GIS INFRASTRUCTURE MAP
+    gis_map_fig = create_gis_infrastructure_map(filtered)
+    map_badge = f"{len(filtered):,} Institutions Geospatially Plotted"
+
+    # 9. TABLE DATA
     display_cols = [
         "udise_code", "school_name", "block_name", "school_management",
         "total_enrolment", "promotion_rate", "pending_students", "readiness_score", "priority_tier"
@@ -931,6 +1199,7 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
         kpi_total, kpi_total_sub,
         kpi_remedial, kpi_deficit,
         funnel_fig, forecast_fig, scatter_fig, radar_fig,
+        gis_map_fig, map_badge,
         table_records, row_count_str, inspector_card
     )
 
@@ -942,6 +1211,23 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
 )
 def handle_clear_search(n_clicks):
     return ""
+
+
+@app.callback(
+    Output("school-search-input", "value", allow_duplicate=True),
+    Input("gis-infrastructure-map", "clickData"),
+    prevent_initial_call=True
+)
+def handle_map_pin_click(click_data):
+    if not click_data or "points" not in click_data or not click_data["points"]:
+        return no_update
+    point = click_data["points"][0]
+    if "customdata" in point and point["customdata"]:
+        udise = str(point["customdata"][0])
+        return udise
+    elif "hovertext" in point and point["hovertext"]:
+        return str(point["hovertext"])
+    return no_update
 
 
 # ---------------------------------------------------------------------------
@@ -1105,12 +1391,221 @@ def handle_pdf_download(n_clicks, policy_markdown):
 
 
 # ---------------------------------------------------------------------------
-# 6. RUN DASH SERVER
+# 6. COGNITIVE MULTI-PERSONA PORTAL & SCHOOL AUDIT CALLBACKS
+# ---------------------------------------------------------------------------
+
+@app.callback(
+    Output("active-portal-store", "data"),
+    Output("portal-tab-citizen", "className"),
+    Output("portal-tab-school", "className"),
+    Output("portal-tab-govt", "className"),
+    Output("section-govt-sim-sandbox", "style"),
+    Output("section-school-admin-view", "style"),
+    Input("portal-tab-citizen", "n_clicks"),
+    Input("portal-tab-school", "n_clicks"),
+    Input("portal-tab-govt", "n_clicks"),
+    prevent_initial_call=True
+)
+def switch_portal_view(btn_cit, btn_sch, btn_gov):
+    from dash import callback_context
+    if not callback_context.triggered:
+        return no_update
+    triggered = callback_context.triggered[0]["prop_id"].split(".")[0]
+
+    style_hidden = {"display": "none"}
+    style_visible = {"display": "block"}
+
+    if triggered == "portal-tab-school":
+        return "school", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn", style_hidden, style_visible
+    elif triggered == "portal-tab-govt":
+        return "govt", "portal-tab-btn", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", style_visible, style_hidden
+    else:
+        return "citizen", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn", "portal-tab-btn", style_hidden, style_hidden
+
+
+@app.callback(
+    Output("input-sch-name", "value"),
+    Output("input-sch-udise", "value"),
+    Output("input-sch-enrol", "value"),
+    Output("input-sch-boys", "value"),
+    Output("input-sch-girls", "value"),
+    Output("input-sch-rooms", "value"),
+    Output("input-sch-teachers", "value"),
+    Output("input-sch-promo", "value"),
+    Output("input-sch-pend", "value"),
+    Input("school-admin-select-dropdown", "value"),
+    prevent_initial_call=True
+)
+def prefill_school_admin_form(selected_udise):
+    if not selected_udise:
+        return "", None, None, None, None, None, None, None, None
+
+    matched = df[df["udise_code"].astype(str) == str(selected_udise)]
+    if matched.empty:
+        return "", None, None, None, None, None, None, None, None
+
+    row = matched.iloc[0]
+    enrol = int(row.get("total_enrolment", 0))
+    boys = int(row.get("total_boys", round(enrol * 0.52)))
+    girls = int(row.get("total_girls", round(enrol * 0.48)))
+    rooms = int(row.get("functional_classrooms", max(1, round(enrol / 38.0))))
+    teachers = int(row.get("total_teachers", max(1, round(enrol / 34.0))))
+    promo = float(row.get("promotion_rate", 85.0))
+    pend = int(row.get("pending_students", 0))
+
+    return (
+        str(row.get("school_name", "")),
+        int(row.get("udise_code", 0)),
+        enrol,
+        boys,
+        girls,
+        rooms,
+        teachers,
+        promo,
+        pend
+    )
+
+
+@app.callback(
+    Output("school-audit-output-container", "children"),
+    Input("btn-sch-audit", "n_clicks"),
+    State("input-sch-name", "value"),
+    State("input-sch-udise", "value"),
+    State("input-sch-enrol", "value"),
+    State("input-sch-boys", "value"),
+    State("input-sch-girls", "value"),
+    State("input-sch-rooms", "value"),
+    State("input-sch-teachers", "value"),
+    State("input-sch-promo", "value"),
+    State("input-sch-pend", "value"),
+    prevent_initial_call=True
+)
+def handle_school_admin_audit(n_clicks, name, udise, enrol, boys, girls, rooms, teachers, promo, pend):
+    if not name and not enrol:
+        return html.Div("Please enter school name and enrollment to run audit.", style={"color": COLOR_CRIMSON, "padding": "12px", "fontSize": "13px"})
+
+    record = {
+        "school_name": name or "Audited School",
+        "udise_code": udise or 27191000000,
+        "total_enrolment": float(enrol or 0),
+        "total_boys": float(boys or 0),
+        "total_girls": float(girls or 0),
+        "functional_classrooms": float(rooms) if rooms is not None else None,
+        "total_teachers": float(teachers) if teachers is not None else None,
+        "promotion_rate": float(promo) if promo is not None else 85.0,
+        "pending_students": float(pend or 0)
+    }
+
+    # 1. Run Data Quality Auditor
+    audit_res = audit_school_record(record)
+    conf_status = audit_res["confidence_status"]
+    conf_color = COLOR_SAGE if conf_status == "Sufficient" else (COLOR_OCHRE if conf_status == "Moderate Confidence" else COLOR_CRIMSON)
+
+    # 2. Run Phased Action Planner & Gaps
+    dossier = formulate_phased_action_plan(record)
+    gaps = dossier["gaps"]
+    priority_tier = dossier["overall_priority"]
+    priority_color = dossier["priority_color"]
+    dominant = dossier["dominant_bottleneck"]
+
+    why_factors = generate_causal_why_factors(dossier)
+    admin_narrative = generate_administrative_narrative(dossier)
+
+    return html.Div(
+        style={"marginTop": "18px", "padding": "18px 20px", "backgroundColor": "#F8FAFC", "border": f"1px solid {COLOR_BORDER}", "borderRadius": "10px"},
+        children=[
+            # Header
+            html.Div(
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "14px", "flexWrap": "wrap", "gap": "10px"},
+                children=[
+                    html.Div([
+                        html.Span("OFFICIAL INSTITUTIONAL DIAGNOSTIC REPORT", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_PINE, "letterSpacing": "0.5px"}),
+                        html.H4(f"{record['school_name']}", style={"margin": "2px 0 0 0", "fontSize": "17px", "color": COLOR_PITCH}),
+                        html.P(f"UDISE: {record['udise_code']} • Dominant Bottleneck: {dominant}", style={"margin": "2px 0 0 0", "fontSize": "12px", "color": COLOR_MUTED})
+                    ]),
+                    html.Div(
+                        style={"display": "flex", "gap": "8px"},
+                        children=[
+                            html.Span(f"DATA AUDIT: {conf_status.upper()}", style={"backgroundColor": "#FFFFFF", "color": conf_color, "border": f"1px solid {conf_color}", "padding": "4px 10px", "borderRadius": "6px", "fontSize": "11px", "fontWeight": "800"}),
+                            html.Span(f"PRIORITY: {priority_tier}", style={"backgroundColor": priority_color, "color": "#FFFFFF", "padding": "4px 12px", "borderRadius": "6px", "fontSize": "11px", "fontWeight": "800"})
+                        ]
+                    )
+                ]
+            ),
+
+            # Data Quality Alert Box
+            html.Div(
+                style={"backgroundColor": "#FFFFFF", "border": f"1px solid {COLOR_BORDER}", "borderRadius": "8px", "padding": "12px 14px", "marginBottom": "14px"},
+                children=[
+                    html.Div(
+                        style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "6px"},
+                        children=[
+                            html.Span(f"Data Completeness Score: {audit_res['completeness_score']}%", style={"fontSize": "12px", "fontWeight": "700", "color": COLOR_PITCH}),
+                            html.Span(audit_res["confidence_message"], style={"fontSize": "11.5px", "color": conf_color, "fontWeight": "600"})
+                        ]
+                    ),
+                    html.Div(
+                        [html.P(f"⚠️ Validation Warning: {v}", style={"margin": "2px 0", "fontSize": "11.5px", "color": COLOR_CRIMSON}) for v in audit_res["domain_violations"]]
+                        if audit_res["domain_violations"] else
+                        html.Span("✓ Zero domain validity contradictions detected in submission.", style={"fontSize": "11.5px", "color": COLOR_SAGE, "fontWeight": "600"})
+                    )
+                ]
+            ),
+
+            # Physical Gaps Breakdown Grid
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "repeat(4, 1fr)", "gap": "12px", "marginBottom": "14px"},
+                children=[
+                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "10px 12px", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}"}, children=[
+                        html.Span("Teacher Gap (ΔT)", style={"fontSize": "11px", "color": COLOR_MUTED}),
+                        html.H4(f"+{gaps['teacher_gap']} Teachers" if gaps['teacher_gap'] > 0 else "✓ Compliant", style={"margin": "3px 0 0 0", "color": COLOR_CRIMSON if gaps['teacher_gap'] > 0 else COLOR_SAGE})
+                    ]),
+                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "10px 12px", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}"}, children=[
+                        html.Span("Classroom Gap (ΔC)", style={"fontSize": "11px", "color": COLOR_MUTED}),
+                        html.H4(f"+{gaps['classroom_gap']} Classrooms" if gaps['classroom_gap'] > 0 else "✓ Compliant", style={"margin": "3px 0 0 0", "color": COLOR_CRIMSON if gaps['classroom_gap'] > 0 else COLOR_SAGE})
+                    ]),
+                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "10px 12px", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}"}, children=[
+                        html.Span("Pupil-Teacher Ratio", style={"fontSize": "11px", "color": COLOR_MUTED}),
+                        html.H4(f"{gaps['actual_ptr']}:1", style={"margin": "3px 0 0 0", "color": COLOR_CRIMSON if gaps['actual_ptr'] > 30 else COLOR_PITCH})
+                    ]),
+                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "10px 12px", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}"}, children=[
+                        html.Span("Capacity Status", style={"fontSize": "11px", "color": COLOR_MUTED}),
+                        html.H4("OVERFLOW ALERT" if gaps['is_capacity_saturated'] else "Capacity Safe", style={"margin": "3px 0 0 0", "color": COLOR_CRIMSON if gaps['is_capacity_saturated'] else COLOR_PINE})
+                    ]),
+                ]
+            ),
+
+            # Phased Action Plan Roadmap
+            html.Div(
+                style={"backgroundColor": "#FFFFFF", "border": f"1px solid {COLOR_BORDER}", "borderRadius": "8px", "padding": "14px 16px"},
+                children=[
+                    html.Span("TRI-PHASED STATUTORY ACTION ROADMAP:", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_PINE, "letterSpacing": "0.5px", "display": "block", "marginBottom": "8px"}),
+                    html.Div([
+                        html.Span("Phase 1 (Immediate 0–90 Days): ", style={"fontWeight": "800", "color": COLOR_PITCH, "fontSize": "12px"}),
+                        html.Span(dossier["phased_plan"]["phase_1_immediate"][0], style={"fontSize": "12px", "color": COLOR_MUTED})
+                    ], style={"marginBottom": "6px"}),
+                    html.Div([
+                        html.Span("Phase 2 (Medium-Term Civil Works 6–24 Months): ", style={"fontWeight": "800", "color": COLOR_PITCH, "fontSize": "12px"}),
+                        html.Span(dossier["phased_plan"]["phase_2_medium"][0], style={"fontSize": "12px", "color": COLOR_MUTED})
+                    ], style={"marginBottom": "6px"}),
+                    html.Div([
+                        html.Span("Phase 3 (Strategic Horizon 2037): ", style={"fontWeight": "800", "color": COLOR_PITCH, "fontSize": "12px"}),
+                        html.Span(dossier["phased_plan"]["phase_3_strategic"][0], style={"fontSize": "12px", "color": COLOR_MUTED})
+                    ])
+                ]
+            )
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# 7. RUN DASH SERVER
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("NITI DRISHTI: Launching Nordic Minimalist Decision Support Platform...")
     print("=" * 70)
+
     app.run(
         debug=False,
         port=8050

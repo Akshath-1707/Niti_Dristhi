@@ -420,3 +420,98 @@ body {
   line-height: 1.5;
 }
 
+/* --------------------------------------------------------------------------
+   Cognitive Decision Support & Multi-Persona Portal Navigation
+   -------------------------------------------------------------------------- */
+.portal-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--card-white);
+  border: 1px solid var(--border-slate);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 20px;
+}
+
+.portal-tab-btn {
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.portal-tab-btn:hover {
+  color: var(--pine-teal);
+  background-color: #F8FAFC;
+}
+
+.portal-tab-btn-active {
+  background-color: var(--pine-teal) !important;
+  color: #FFFFFF !important;
+  border-color: var(--pine-teal) !important;
+  box-shadow: 0 2px 6px rgba(15, 118, 110, 0.2);
+}
+
+.dossier-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-slate);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-top: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.why-factor-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border-slate);
+  font-size: 12.5px;
+  color: var(--text-pitch);
+  line-height: 1.5;
+}
+
+.why-factor-row:last-child {
+  border-bottom: none;
+}
+
+.sandbox-container {
+  background-color: #F8FAFC;
+  border: 1px solid var(--border-slate);
+  border-left: 4px solid var(--cyan-slate);
+  border-radius: 10px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Geospatial GIS Map Card & Legend Styling
+   -------------------------------------------------------------------------- */
+.gis-map-container {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-slate);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  background-color: #FFFFFF;
+}
+
+.map-control-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background-color: #F1F5F9;
+  color: var(--text-muted);
+}
+
+
