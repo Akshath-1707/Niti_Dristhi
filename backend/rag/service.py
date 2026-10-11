@@ -164,14 +164,10 @@ class RAGPolicyEngine:
         sources = ["NEP 2020 Sec 3.1", "RTE Act 2009 Sec 19", "Samagra Shiksha 2024 Framework"]
         return fallback_context, sources
 
-    def generate_policy_directive(self, user_prompt: str = None, data_path=None) -> dict:
+    def generate_policy_directive(self, user_prompt: str = None, data_path=None, school_info: dict = None) -> dict:
         """
         Synthesizes empirical data and statutory documents to generate an executive policy brief.
-        Returns a dict containing:
-          - 'thinking_steps': list of realistic reasoning steps
-          - 'policy_report': formatted markdown policy document
-          - 'sources': list of cited statutory sources
-          - 'audit_metrics': empirical metrics dictionary
+        Supports both district-level inquiries and personalized school-specific directives.
         """
         audit = self.get_empirical_audit(data_path)
         prompt_query = user_prompt or (
@@ -181,18 +177,44 @@ class RAGPolicyEngine:
 
         statutory_context, sources = self.retrieve_statutory_context(prompt_query)
 
-        # Build Dynamic Function-Level Thinking / Execution Steps
-        thinking_steps = [
-            f"Inspecting district empirical data: 278,945 students across 954 schools (949 operational, 99.5% stability).",
-            f"Analyzing cohort retention: Upper Primary (76,819) drops by 38.4% entering Secondary (47,322).",
-            f"Retrieving Horizon 2037 forecast: Projected growth to 350,573 students (+2,388 classrooms needed under RTE 30:1).",
-            f"Scanning FAISS vector index: Cross-referencing NEP 2020 §3.1, RTE Act 2009 §19, and Samagra Shiksha norms.",
-            f"Activating local Qwen 2.5 on NVIDIA RTX 5050 GPU (8GB GDDR7) to synthesize direct answer.",
-        ]
+        # Dynamic Function-Level Thinking / Execution Steps
+        if school_info:
+            s_name = school_info.get("school_name", "Audited Institution")
+            s_udise = school_info.get("udise_code", "N/A")
+            s_rooms = int(school_info.get("functional_classrooms", 0))
+            s_teachers = int(school_info.get("total_teachers", 0))
+            s_ptr = round(float(school_info.get("ptr", 30)), 1)
+            s_tyear = int(school_info.get("target_year", 2030))
+            s_def = int(school_info.get("target_deficit", 0))
+            thinking_steps = [
+                f"Inspecting institutional master record: {s_name} (UDISE: {s_udise}).",
+                f"Auditing physical capacity: {s_rooms} classrooms & {s_teachers} teachers (PTR {s_ptr}:1 vs RTE 30:1 statutory ceiling).",
+                f"Projecting student cohort through Milestone {s_tyear}: Calculated deficit of {s_def} classrooms.",
+                f"Scanning FAISS statutory index: Cross-referencing NEP 2020 §3.1, RTE Act 2009 §19, and Samagra Shiksha norms.",
+                f"Synthesizing personalized institutional policy directive and statutory compliance roadmap.",
+            ]
+            school_context_str = f"""
+### 1. TARGET INSTITUTIONAL PROFILE ({s_name} - UDISE: {s_udise}):
+- Enrolment: {int(school_info.get('total_enrolment', 0))} students ({int(school_info.get('total_girls', 0))} Girls | {int(school_info.get('total_boys', 0))} Boys | GPI: {round(float(school_info.get('gpi', 1.0)), 2)})
+- Physical Facilities: {s_rooms} functional classrooms | Sanctioned Teachers: {s_teachers} (PTR: {s_ptr}:1)
+- Promotion Performance: {round(float(school_info.get('promotion_rate', 85.0)), 1)}% pass rate | Pending Remedial Students: {int(school_info.get('pending_students', 0))}
+- Institutional Readiness Score: {round(float(school_info.get('readiness_score', 80)), 1)} / 100 ({school_info.get('priority_tier', 'STABLE')})
+- Planning Milestone {s_tyear} Deficit: {s_def} classrooms needed under RTE 30:1 norms
+- Statutory Gaps: Classroom Gap: +{int(school_info.get('classroom_gap', 0))} | Teacher Gap: +{int(school_info.get('teacher_gap', 0))}
+"""
+        else:
+            thinking_steps = [
+                f"Inspecting district empirical data: 278,945 students across 954 schools (949 operational, 99.5% stability).",
+                f"Analyzing cohort retention: Upper Primary (76,819) drops by 38.4% entering Secondary (47,322).",
+                f"Retrieving Horizon 2037 forecast: Projected growth to 350,573 students (+2,388 classrooms needed under RTE 30:1).",
+                f"Scanning FAISS vector index: Cross-referencing NEP 2020 §3.1, RTE Act 2009 §19, and Samagra Shiksha norms.",
+                f"Activating local Qwen 2.5 on NVIDIA RTX 5050 GPU (8GB GDDR7) to synthesize direct answer.",
+            ]
+            school_context_str = ""
 
         full_prompt = f"""You are NITI DRISHTI AI, an elite domain intelligence assistant specialized exclusively in the urban education infrastructure of Chhatrapati Sambhajinagar.
 Your objective is to answer the user's specific prompt with high intellectual depth, complete quantitative accuracy, and ZERO boilerplate noise.
-
+{school_context_str}
 ### 1. GROUND-TRUTH DISTRICT REPOSITORY (URC-1 & URC-2 Urban Core):
 - Total Institutions: {audit['total_schools']} ({audit['active_schools']} active, 99.5% operational stability)
 - Student Population: {audit['total_students']:,} ({audit['boys']:,} Boys | {audit['girls']:,} Girls | Gender Parity Index: {audit['gpi']})
@@ -222,8 +244,7 @@ Your objective is to answer the user's specific prompt with high intellectual de
 
 ### OPERATIONAL INSTRUCTIONS:
 - Directly and specifically address what the user is asking. Do NOT force an unrelated policy template if the user is asking for an explanation of data or forecasts.
-- If the user asks to "explain current data": Break down the 278,945 students, active institutions, gender parity, and the 38.4% drop-off clearly.
-- If the user asks to "explain Student Enrollment Forecast (2021 to 2037) Predictive demographic trajectory with 85% statistical confidence bounds": Deeply explain the mathematical trajectory, the 85% confidence envelope, why enrollment reaches 350,573 by 2037, and why exactly +2,388 classrooms are needed under the RTE 30:1 rule.
+- If this is an institutional audit: Address the specific school's metrics, PTR compliance, milestone classroom deficit, and remedial requirements.
 - If the user asks for policy recommendations: Provide prioritized statutory directives citing legal frameworks.
 - Provide clean, professional Markdown formatting with clear section headers, bullet points, and high-level analytical clarity.
 """
@@ -269,10 +290,74 @@ Your objective is to answer the user's specific prompt with high intellectual de
                 print(f"[Gemini RAG Error]: {e}")
 
         # Generation Strategy 3: Grounded Statutory Knowledge Synthesis (Fail-Safe)
-        drop_rate = round((1 - (audit['enrol_secondary'] / max(audit['enrol_upper_primary'], 1))) * 100, 1)
-        synthetic_report = f"""# NITI DRISHTI: EXECUTIVE POLICY DIRECTIVE
+        if school_info:
+            s_name = school_info.get("school_name", "Audited Institution")
+            s_udise = school_info.get("udise_code", "N/A")
+            s_enrol = int(school_info.get("total_enrolment", 0))
+            s_boys = int(school_info.get("total_boys", 0))
+            s_girls = int(school_info.get("total_girls", 0))
+            s_gpi = round(float(school_info.get("gpi", 1.0)), 2)
+            s_rooms = int(school_info.get("functional_classrooms", 0))
+            s_teachers = int(school_info.get("total_teachers", 0))
+            s_ptr = round(float(school_info.get("ptr", 30)), 1)
+            s_promo = round(float(school_info.get("promotion_rate", 85.0)), 1)
+            s_pending = int(school_info.get("pending_students", 0))
+            s_tyear = int(school_info.get("target_year", 2030))
+            s_score = round(float(school_info.get("readiness_score", 80)), 1)
+            s_tier = school_info.get("priority_tier", "STABLE")
+            s_cg = int(school_info.get("classroom_gap", 0))
+            s_tg = int(school_info.get("teacher_gap", 0))
+            s_def = int(school_info.get("target_deficit", 0))
+
+            synthetic_report = f"""# NITI DRISHTI: INSTITUTIONAL POLICY & STATUTORY ACTION DIRECTIVE
+**Target Institution:** {s_name} | **UDISE Code:** {s_udise}  
+**Administrative Ward:** Chhatrapati Sambhajinagar Urban Center (URC)  
+**Statutory Framework:** NEP 2020, RTE Act 2009 & Samagra Shiksha Framework 2024  
+**Target Planning Milestone:** {s_tyear} (2-Year Horizon Window)  
+
+---
+
+## 1. Institutional Diagnostic & Statutory Baseline
+Statutory compliance evaluation of **{s_name}** establishes an Institutional Readiness Score of **{s_score}/100** (Operational Tier: **{s_tier}**):
+
+1. **Student Census & Gender Balance**: Currently educating **{s_enrol:,} active students** ({s_girls:,} Girls | {s_boys:,} Boys), yielding a Gender Parity Index of **{s_gpi}**.
+2. **Infrastructure & Pupil-Teacher Norms (RTE §19)**:
+   - Functional Classrooms: **{s_rooms} operational rooms** ({f'Deficit of +{s_cg} classrooms under RTE' if s_cg > 0 else 'Meets statutory 30:1 space standard'}).
+   - Sanctioned Teaching Cadre: **{s_teachers} teachers**, producing an active PTR of **{s_ptr}:1** ({f'Exceeds 30:1 statutory ceiling by {s_tg} educators' if s_ptr > 30 else 'Complies with mandatory 30:1 ratio'}).
+3. **Learning Continuity & Remedial Need**: Academic promotion pass rate stands at **{s_promo}%**, with **{s_pending:,} non-promoted learners** requiring fast-track intervention.
+4. **Milestone {s_tyear} Capacity Outlook**: Based on cohort projection models, this institution will encounter a net classroom need of **{s_def} classrooms by Milestone {s_tyear}**.
+
+---
+
+## 2. Binding Statutory Directives for {s_name}
+
+### **Directive 1: Accelerated Remedial Bridge Deployment (Samagra Shiksha 2024)**
+- Mandate an immediate 60-day intensive foundational literacy and numeracy bridge program for the **{s_pending} at-risk students**.
+- Mobilize remedial learning kits and monitor bi-weekly learning gains prior to reassessment.
+
+### **Directive 2: Civil Infrastructure & Milestone {s_tyear} Sanctions (RTE Act §19)**
+- {f'Submit urgent capital sanction proposal to the District Education Officer for +{s_cg} additional classrooms.' if s_cg > 0 else f'Maintain structural preservation and smart-classroom upgrades for the {s_rooms} active classrooms.'}
+- Pre-fund civil expansions to absorb the projected **+{s_def} classroom requirement** before the **Milestone {s_tyear}** student influx.
+- Guarantee dedicated, secure female sanitation facilities with 100% running water to protect girl child retention.
+
+### **Directive 3: Instructional Cadre & PTR Compliance (NEP 2020 §3.1)**
+- {f'Depute {s_tg} cluster-level resource teachers to immediately bring the PTR down to the statutory <=30:1 ceiling.' if s_tg > 0 else 'Maintain current compliant teacher allocation and schedule termly pedagogical development.'}
+
+---
+
+## 3. Tailored Tri-Phased Implementation Roadmap
+
+| Phase | Horizon | Targeted Milestone for {s_name} |
+| :--- | :--- | :--- |
+| **Phase 1 (Immediate)** | 0–90 Days | Launch remedial bridge camps for {s_pending} learners; audit electrical & sanitation fixtures. |
+| **Phase 2 (Medium-Term)** | 6–24 Months | Complete civil classroom additions ({f'+{s_cg} rooms' if s_cg > 0 else 'routine civil upgrade'}); install digital learning corner. |
+| **Phase 3 (Milestone {s_tyear})** | Horizon Window | Absorb projected cohort growth to ensure zero capacity deficit through {s_tyear}. |
+"""
+        else:
+            drop_rate = round((1 - (audit['enrol_secondary'] / max(audit['enrol_upper_primary'], 1))) * 100, 1)
+            synthetic_report = f"""# NITI DRISHTI: EXECUTIVE POLICY DIRECTIVE
 **District Administration | Chhatrapati Sambhajinagar**  
-*Statutory Framework: NEP 2020, RTE Act 2009 & Samagra Shiksha Framework 2024*
+**Statutory Framework:** NEP 2020, RTE Act 2009 & Samagra Shiksha Framework 2024  
 
 ---
 
@@ -328,9 +413,9 @@ def get_rag_engine():
         _engine = RAGPolicyEngine()
     return _engine
 
-def generate_education_policy_brief(user_prompt: str = None, data_path=None):
+def generate_education_policy_brief(user_prompt: str = None, data_path=None, school_info: dict = None):
     engine = get_rag_engine()
-    return engine.generate_policy_directive(user_prompt=user_prompt, data_path=data_path)
+    return engine.generate_policy_directive(user_prompt=user_prompt, data_path=data_path, school_info=school_info)
 
 
 if __name__ == "__main__":
