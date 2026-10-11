@@ -115,8 +115,8 @@ def create_gis_infrastructure_map(df_filtered: pd.DataFrame) -> go.Figure:
         "pending_students": True,
     }
 
-    try:
-        # Plotly 6.x modern scatter_map
+    if hasattr(px, "scatter_map"):
+        # Plotly 6.x/7.x modern scatter_map (MapLibre based)
         fig = px.scatter_map(
             df_plot,
             lat="latitude",
@@ -129,10 +129,10 @@ def create_gis_infrastructure_map(df_filtered: pd.DataFrame) -> go.Figure:
             custom_data=["udise_code", "school_name", "readiness_score"],
             zoom=11.2,
             center={"lat": center_lat, "lon": center_lon},
-            map_style="carto-positron"
+            map_style="open-street-map"
         )
-    except AttributeError:
-        # Backward compatibility for px.scatter_mapbox
+    else:
+        # Backward compatibility for Plotly 5.x scatter_mapbox
         fig = px.scatter_mapbox(
             df_plot,
             lat="latitude",
@@ -145,7 +145,7 @@ def create_gis_infrastructure_map(df_filtered: pd.DataFrame) -> go.Figure:
             custom_data=["udise_code", "school_name", "readiness_score"],
             zoom=11.2,
             center={"lat": center_lat, "lon": center_lon},
-            mapbox_style="carto-positron"
+            mapbox_style="open-street-map"
         )
 
     fig.update_layout(

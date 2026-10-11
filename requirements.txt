@@ -17,6 +17,6 @@ langchain==0.2.6
 langchain-community==0.2.6
 sentence-transformers==3.0.1
 pypdf==4.2.0
-dash==2.14.2
-plotly==5.18.0
-reportlab==4.0.9
+dash>=2.14.2
+plotly>=5.18.0
+reportlab>=4.0.9
