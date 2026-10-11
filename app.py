@@ -2519,6 +2519,10 @@ def handle_preset_prompts(btn1, btn2, btn3, btn4, portal, sch_name, sch_udise, s
     Output("rag-output-container", "children"),
     Output("rag-download-pdf-btn", "disabled"),
     Input("rag-submit-btn", "n_clicks"),
+    Input("preset-btn-1", "n_clicks"),
+    Input("preset-btn-2", "n_clicks"),
+    Input("preset-btn-3", "n_clicks"),
+    Input("preset-btn-4", "n_clicks"),
     State("rag-prompt-input", "value"),
     State("active-portal-store", "data"),
     State("input-sch-name", "value"),
@@ -2534,9 +2538,35 @@ def handle_preset_prompts(btn1, btn2, btn3, btn4, portal, sch_name, sch_udise, s
     prevent_initial_call=True
 )
 def initiate_rag_generation(
-    n_clicks, prompt_text, portal,
+    btn_submit, btn1, btn2, btn3, btn4, prompt_text, portal,
     sch_name, sch_udise, sch_enrol, sch_boys, sch_girls, sch_rooms, sch_teachers, sch_promo, sch_pend, sch_milestone
 ):
+    from dash import callback_context
+    triggered_id = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else "rag-submit-btn"
+    portal = portal or "citizen"
+    milestone = sch_milestone or 2030
+
+    # If triggered by a preset button, automatically generate the appropriate prompt
+    if triggered_id == "preset-btn-1":
+        if portal == "school":
+            prompt_text = f"Explain the diagnostic profile, infrastructure adequacy, and readiness index for {sch_name or 'this institution'} under NEP 2020."
+        else:
+            prompt_text = "Explain the current district education data, total enrollment, gender parity, grade distribution, and operational metrics for Chhatrapati Sambhajinagar."
+    elif triggered_id == "preset-btn-2":
+        if portal == "school":
+            prompt_text = f"Explain the capacity stress forecast and classroom deficit for {sch_name or 'this institution'} through Milestone {milestone} under RTE 30:1 norms."
+        else:
+            prompt_text = f"Explain the Student Enrollment Forecast (2021 to 2037), the predictive demographic trajectory with 85% statistical confidence bounds, and the classroom deficit under RTE 30:1 norms for Milestone {milestone}."
+    elif triggered_id == "preset-btn-3":
+        if portal == "school":
+            prompt_text = f"Formulate an institutional remedial bridge action plan for the non-promoted learners at {sch_name or 'this institution'} citing Samagra Shiksha."
+        else:
+            prompt_text = "Analyze the student drop-off between Upper Primary (76k) and Secondary (47k) stages. Formulate statutory directives under NEP 2020 for secondary school expansion."
+    elif triggered_id == "preset-btn-4":
+        if portal == "school":
+            prompt_text = f"Synthesize an urgent statutory compliance action plan for {sch_name or 'this institution'} to meet RTE Act 30:1 PTR and female sanitation norms."
+        else:
+            prompt_text = "Propose an urgent administrative directive for the non-promoted students, citing Samagra Shiksha remedial bridge funding and fast-track learning recovery."
     if not prompt_text or not prompt_text.strip():
         return "", 0, True, html.Div("Please provide an executive policy prompt.", style={"color": COLOR_CRIMSON, "padding": "16px"}), True
 
@@ -2629,15 +2659,30 @@ def initiate_rag_generation(
             ]
         ),
 
-        # Smooth Plain-Text Streaming Box (Prevents Markdown DOM parsing flicker!)
+        # Synthesized Policy Directive Document
         html.Div(
-            id="rag-streaming-text-target",
-            className="streaming-text-box",
-            children="Initiating generation stream... ▌"
+            style={
+                "backgroundColor": "#FFFFFF",
+                "border": f"1px solid {COLOR_BORDER}",
+                "borderRadius": "8px",
+                "padding": "24px",
+                "marginTop": "14px",
+                "boxShadow": "0 1px 3px rgba(0,0,0,0.05)"
+            },
+            children=[
+                dcc.Markdown(
+                    full_policy_text,
+                    style={
+                        "color": COLOR_PITCH,
+                        "fontSize": "13.5px",
+                        "lineHeight": "1.7"
+                    }
+                )
+            ]
         )
     ])
 
-    return full_policy_text, 0, False, initial_view, False
+    return full_policy_text, len(full_policy_text), True, initial_view, False
 
 
 @app.callback(

@@ -249,27 +249,12 @@ Your objective is to answer the user's specific prompt with high intellectual de
 - Provide clean, professional Markdown formatting with clear section headers, bullet points, and high-level analytical clarity.
 """
 
-        # Generation Strategy 1: Local Ollama on RTX 5050 (Primary Engine)
-        if OLLAMA_AVAILABLE:
-            for local_model in ["qwen2.5:7b-instruct", "llama3.1:8b"]:
-                try:
-                    llm_ollama = Ollama(model=local_model, temperature=0.2)
-                    resp = llm_ollama.invoke(full_prompt)
-                    return {
-                        "thinking_steps": thinking_steps,
-                        "policy_report": resp,
-                        "sources": sources,
-                        "audit_metrics": audit,
-                        "engine": f"Local Ollama ({local_model} on RTX 5050 GPU) + FAISS RAG"
-                    }
-                except Exception as e:
-                    print(f"[Ollama {local_model} Notice]: {e}")
-
-        # Generation Strategy 2: Google Gemini (Cloud Fallback)
+        # Generation Strategy 1: Google Gemini (Primary when API key is provided)
         gemini_key = os.getenv("GEMINI_API_KEY")
         if GEMINI_AVAILABLE and gemini_key and "YourActualKey" not in gemini_key:
             try:
-                for model_name in ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                # Modern production Gemini models
+                for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
                     try:
                         llm = ChatGoogleGenerativeAI(
                             model=model_name,
@@ -284,10 +269,37 @@ Your objective is to answer the user's specific prompt with high intellectual de
                             "audit_metrics": audit,
                             "engine": f"Google Gemini ({model_name}) + FAISS RAG"
                         }
-                    except Exception:
+                    except Exception as me:
+                        print(f"[Gemini {model_name} Notice]: {me}")
                         continue
             except Exception as e:
                 print(f"[Gemini RAG Error]: {e}")
+
+        # Generation Strategy 2: Local Ollama on GPU (Only if local daemon is actively running)
+        if OLLAMA_AVAILABLE:
+            import socket
+            ollama_live = False
+            try:
+                # Fast 0.5s probe to ensure Ollama port 11434 is actually open
+                with socket.create_connection(("127.0.0.1", 11434), timeout=0.5):
+                    ollama_live = True
+            except (OSError, ConnectionRefusedError):
+                ollama_live = False
+
+            if ollama_live:
+                for local_model in ["qwen2.5:7b-instruct", "llama3.1:8b"]:
+                    try:
+                        llm_ollama = Ollama(model=local_model, temperature=0.2, timeout=15)
+                        resp = llm_ollama.invoke(full_prompt)
+                        return {
+                            "thinking_steps": thinking_steps,
+                            "policy_report": resp,
+                            "sources": sources,
+                            "audit_metrics": audit,
+                            "engine": f"Local Ollama ({local_model} on RTX 5050 GPU) + FAISS RAG"
+                        }
+                    except Exception as e:
+                        print(f"[Ollama {local_model} Notice]: {e}")
 
         # Generation Strategy 3: Grounded Statutory Knowledge Synthesis (Fail-Safe)
         if school_info:
