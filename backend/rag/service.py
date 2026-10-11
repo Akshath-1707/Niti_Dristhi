@@ -51,9 +51,12 @@ class RAGPolicyEngine:
         self.vectorstore = None
         self.retriever = None
         self.embeddings = None
-        self._init_vectorstore()
+        self._initialized = False
 
-    def _init_vectorstore(self):
+    def _ensure_vectorstore(self):
+        if self._initialized:
+            return
+        self._initialized = True
         if not LANGCHAIN_AVAILABLE:
             return
         if VECTORSTORE_DIR.exists() and (VECTORSTORE_DIR / "index.faiss").exists():
@@ -140,6 +143,7 @@ class RAGPolicyEngine:
         """
         Retrieves top relevant statutory clauses from FAISS.
         """
+        self._ensure_vectorstore()
         if self.retriever:
             try:
                 docs = self.retriever.invoke(query)
@@ -249,39 +253,42 @@ Your objective is to answer the user's specific prompt with high intellectual de
 - Provide clean, professional Markdown formatting with clear section headers, bullet points, and high-level analytical clarity.
 """
 
-        # Generation Strategy 1: Google Gemini (Primary when API key is provided)
+        # Generation Strategy 1: Google Gemini (Direct Native API for sub-second responses)
         gemini_key = os.getenv("GEMINI_API_KEY")
-        if GEMINI_AVAILABLE and gemini_key and "YourActualKey" not in gemini_key:
+        if gemini_key and "YourActualKey" not in gemini_key:
             try:
-                # Modern production Gemini models
-                for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                
+                # Fast failover with 3s timeout per attempt
+                for model_name in ["gemini-2.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]:
                     try:
-                        llm = ChatGoogleGenerativeAI(
-                            model=model_name,
-                            google_api_key=gemini_key,
-                            temperature=0.2
+                        model = genai.GenerativeModel(model_name)
+                        response = model.generate_content(
+                            full_prompt,
+                            request_options={"timeout": 3}
                         )
-                        response = llm.invoke(full_prompt)
-                        return {
-                            "thinking_steps": thinking_steps,
-                            "policy_report": response.content,
-                            "sources": sources,
-                            "audit_metrics": audit,
-                            "engine": f"Google Gemini ({model_name}) + FAISS RAG"
-                        }
+                        if response and response.text:
+                            return {
+                                "thinking_steps": thinking_steps,
+                                "policy_report": response.text,
+                                "sources": sources,
+                                "audit_metrics": audit,
+                                "engine": f"Google Gemini ({model_name}) + Grounded RAG"
+                            }
                     except Exception as me:
                         print(f"[Gemini {model_name} Notice]: {me}")
                         continue
             except Exception as e:
-                print(f"[Gemini RAG Error]: {e}")
+                print(f"[Gemini Direct Error]: {e}")
 
         # Generation Strategy 2: Local Ollama on GPU (Only if local daemon is actively running)
         if OLLAMA_AVAILABLE:
             import socket
             ollama_live = False
             try:
-                # Fast 0.5s probe to ensure Ollama port 11434 is actually open
-                with socket.create_connection(("127.0.0.1", 11434), timeout=0.5):
+                # Fast 0.3s probe to ensure Ollama port 11434 is actually open
+                with socket.create_connection(("127.0.0.1", 11434), timeout=0.3):
                     ollama_live = True
             except (OSError, ConnectionRefusedError):
                 ollama_live = False
