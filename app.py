@@ -1808,52 +1808,8 @@ app.layout = html.Div(
                 # Dynamic Output Area (Flicker-Free Smooth Streaming with Active Agentic Thinking)
                 dcc.Loading(
                     id="rag-loading-wrapper",
-                    custom_spinner=html.Div(
-                        className="thinking-container",
-                        style={"marginTop": "18px", "padding": "18px 22px"},
-                        children=[
-                            html.Div(
-                                className="thinking-header",
-                                children=[
-                                    html.Span(className="pulse-dot"),
-                                    html.Span("RETRIEVING STATUTORY GUIDANCE & EVIDENCE...", style={"fontWeight": "700", "fontSize": "13px", "letterSpacing": "0.5px"})
-                                ]
-                            ),
-                            html.Div(
-                                style={"marginTop": "12px", "display": "flex", "flexDirection": "column", "gap": "6px"},
-                                children=[
-                                    html.Div(
-                                        className="thinking-step-row",
-                                        children=[
-                                            html.Span(">", style={"color": COLOR_GOVT_BLUE, "fontWeight": "700", "fontFamily": "monospace"}),
-                                            html.Span("Inspecting district master database: 278,945 students across 954 schools...", style={"color": COLOR_PITCH, "fontWeight": "600"})
-                                        ]
-                                    ),
-                                    html.Div(
-                                        className="thinking-step-row",
-                                        children=[
-                                            html.Span(">", style={"color": COLOR_GOVT_BLUE, "fontWeight": "700", "fontFamily": "monospace"}),
-                                            html.Span("Scanning 2021–2037 demographic forecasts (85% confidence bounds & RTE 30:1 PTR)...", style={"color": COLOR_MUTED})
-                                        ]
-                                    ),
-                                    html.Div(
-                                        className="thinking-step-row",
-                                        children=[
-                                            html.Span(">", style={"color": COLOR_GOVT_BLUE, "fontWeight": "700", "fontFamily": "monospace"}),
-                                            html.Span("Querying vector index for statutory mandates (NEP 2020, RTE Act, Samagra Shiksha)...", style={"color": COLOR_MUTED})
-                                        ]
-                                    ),
-                                    html.Div(
-                                        className="thinking-step-row",
-                                        children=[
-                                            html.Span(">", style={"color": COLOR_GOVT_BLUE, "fontWeight": "700", "fontFamily": "monospace"}),
-                                            html.Span("Formulating evidence-based synthesis for district planners...", style={"color": COLOR_GOVT_BLUE, "fontWeight": "700"})
-                                        ]
-                                    ),
-                                ]
-                            )
-                        ]
-                    ),
+                    type="circle",
+                    color=COLOR_GOVT_BLUE,
                     children=html.Div(
                         id="rag-output-container",
                         style={"marginTop": "18px"},
