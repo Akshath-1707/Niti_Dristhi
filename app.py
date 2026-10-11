@@ -2439,83 +2439,39 @@ def update_policy_assistant_header(portal, sch_name, sch_udise, milestone):
         name = sch_name or "Selected Institution"
         u_str = f" (UDISE: {sch_udise})" if sch_udise else ""
         return (
-            f"School Action Copilot • {name}",
-            f"Formulates clear operational recommendations for {name}{u_str} under NEP 2020, RTE Act 2009 (30:1 student-teacher ratio), and Samagra Shiksha for planning year {milestone}.",
-            "SCHOOL-SPECIFIC",
-            "Explain Diagnostic Profile & Gaps",
-            f"Year {milestone} Deficit Analysis",
-            "Remedial Learning Recovery Plan",
-            "NEP & RTE Compliance Standards"
+            f"Institution Action Copilot • {name}",
+            f"Personalized institutional diagnostics, PTR compliance, milestone {milestone} deficit, and tailored internal policy action plan for this specific school.",
+            "INSTITUTION ASSESSMENT",
+            "Audit My School's Profile & Gaps",
+            f"Classroom & PTR Deficit for {milestone}",
+            "Our Internal Remedial Bridge Action Plan",
+            "Institutional RTE & Sanitation Compliance Plan"
         )
     elif portal == "govt":
         return (
-            "Policy & Planning Assistant • Scenario Planning",
-            "Cross-references simulated district infrastructure indicators with official standards (NEP 2020, RTE Act 2009, Samagra Shiksha).",
-            "SCENARIO COPILOT",
-            "Explain Current District Data",
-            f"Explain Year {milestone} Forecast",
-            "Analyze 38.4% Secondary Drop-off",
-            "Remedial Support Strategy"
+            "Policy & Planning Authority Copilot • District Administration",
+            "Authoritative district development planning, statutory resource allocation (NEP 2020 / RTE Act / Samagra Shiksha), and school inspection dossiers.",
+            "GOVERNMENT AUTHORITY",
+            "District Infrastructure Master Plan",
+            f"Demographic Expansion & Capital Budgeting",
+            "Secondary Complex Hubs (Fix 38.4% Drop)",
+            "District-Wide Remedial Mandate (27k Cohort)"
         )
     else:
         return (
-            "Policy & Planning Assistant",
-            "Cross-references district school data with official education standards (NEP 2020, RTE Act 2009, Samagra Shiksha) to provide clear planning recommendations.",
-            "AI-ASSISTED",
-            "Explain Current District Data",
-            "Explain 2021–2040 Forecast",
-            "Analyze 38.4% Secondary Drop-off",
-            "Remedial Support Strategy"
+            "Public Education Guide • Chhatrapati Sambhajinagar",
+            "Understand district schools, student numbers, gender parity, and community learning support in clear, accessible terms.",
+            "PUBLIC CITIZEN VIEW",
+            "District Schools & Student Census",
+            "Understanding the 2021–2037 Forecast",
+            "Why Secondary School Seats Drop Off",
+            "Help for Struggling Students (Remedial)"
         )
 
 
 @app.callback(
     Output("rag-prompt-input", "value"),
-    Input("preset-btn-1", "n_clicks"),
-    Input("preset-btn-2", "n_clicks"),
-    Input("preset-btn-3", "n_clicks"),
-    Input("preset-btn-4", "n_clicks"),
-    State("active-portal-store", "data"),
-    State("input-sch-name", "value"),
-    State("input-sch-udise", "value"),
-    State("school-horizon-milestone", "value"),
-    State("input-sch-pend", "value"),
-    prevent_initial_call=True
-)
-def handle_preset_prompts(btn1, btn2, btn3, btn4, portal, sch_name, sch_udise, sch_milestone, sch_pend):
-    from dash import callback_context
-    triggered_id = callback_context.triggered[0]["prop_id"].split(".")[0]
-    portal = portal or "citizen"
-    milestone = sch_milestone or 2030
-
-    if portal == "school":
-        name = sch_name or "this institution"
-        u_str = f" (UDISE: {sch_udise})" if sch_udise else ""
-        pend_count = int(sch_pend or 0)
-        if triggered_id == "preset-btn-1":
-            return f"Explain the diagnostic profile, infrastructure adequacy, and readiness index for {name}{u_str} under NEP 2020."
-        elif triggered_id == "preset-btn-2":
-            return f"Explain the variable horizon capacity stress forecast and classroom deficit for {name} through Milestone {milestone} under RTE 30:1 norms."
-        elif triggered_id == "preset-btn-3":
-            return f"Formulate an institutional remedial bridge action plan for the {pend_count} non-promoted learners at {name} citing Samagra Shiksha learning recovery."
-        elif triggered_id == "preset-btn-4":
-            return f"Synthesize an urgent statutory compliance action plan for {name} to meet RTE Act 30:1 PTR and female sanitation norms."
-    else:
-        if triggered_id == "preset-btn-1":
-            return "Explain the current district education data, total enrollment, gender parity, grade distribution, and operational metrics for Chhatrapati Sambhajinagar."
-        elif triggered_id == "preset-btn-2":
-            return f"Explain the Student Enrollment Forecast (2021 to 2037), the predictive demographic trajectory with 85% statistical confidence bounds, and the classroom deficit under RTE 30:1 norms for Milestone {milestone}."
-        elif triggered_id == "preset-btn-3":
-            return "Analyze the severe student drop-off between Upper Primary (76k) and Secondary (47k) stages. Formulate statutory directives under NEP 2020 for secondary school expansion."
-        elif triggered_id == "preset-btn-4":
-            return "Propose an urgent administrative directive for the 27,235 non-promoted students, citing Samagra Shiksha remedial bridge funding and fast-track learning recovery."
-    return no_update
-
-
-@app.callback(
     Output("rag-full-text-store", "data"),
-    Output("rag-stream-cursor", "data"),
-    Output("rag-typewriter-interval", "disabled"),
     Output("rag-output-container", "children"),
     Output("rag-download-pdf-btn", "disabled"),
     Input("rag-submit-btn", "n_clicks"),
@@ -2535,40 +2491,55 @@ def handle_preset_prompts(btn1, btn2, btn3, btn4, portal, sch_name, sch_udise, s
     State("input-sch-promo", "value"),
     State("input-sch-pend", "value"),
     State("school-horizon-milestone", "value"),
+    State("school-search-input", "value"),
     prevent_initial_call=True
 )
 def initiate_rag_generation(
     btn_submit, btn1, btn2, btn3, btn4, prompt_text, portal,
-    sch_name, sch_udise, sch_enrol, sch_boys, sch_girls, sch_rooms, sch_teachers, sch_promo, sch_pend, sch_milestone
+    sch_name, sch_udise, sch_enrol, sch_boys, sch_girls, sch_rooms, sch_teachers, sch_promo, sch_pend, sch_milestone,
+    school_search_val
 ):
     from dash import callback_context
     triggered_id = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else "rag-submit-btn"
-    portal = portal or "citizen"
+    portal = (portal or "citizen").lower()
     milestone = sch_milestone or 2030
 
-    # If triggered by a preset button, automatically generate the appropriate prompt
-    if triggered_id == "preset-btn-1":
+    # If triggered by a preset button, generate role-tailored prompt and update the input area
+    if triggered_id.startswith("preset-btn-"):
         if portal == "school":
-            prompt_text = f"Explain the diagnostic profile, infrastructure adequacy, and readiness index for {sch_name or 'this institution'} under NEP 2020."
+            s_label = sch_name or "this institution"
+            u_label = f" (UDISE: {sch_udise})" if sch_udise else ""
+            p_count = int(sch_pend or 0)
+            if triggered_id == "preset-btn-1":
+                prompt_text = f"Provide a personalized diagnostic profile and infrastructure adequacy assessment for {s_label}{u_label} under RTE Act 30:1 standards."
+            elif triggered_id == "preset-btn-2":
+                prompt_text = f"Analyze our projected student capacity stress and classroom deficit through planning year {milestone} for {s_label} under RTE 30:1 norms."
+            elif triggered_id == "preset-btn-3":
+                prompt_text = f"Formulate an internal institutional remedial bridge action plan for the {p_count} non-promoted learners at {s_label} citing Samagra Shiksha."
+            elif triggered_id == "preset-btn-4":
+                prompt_text = f"Formulate an urgent internal statutory compliance roadmap for {s_label} to meet the 30:1 PTR ceiling and female sanitation standards."
+        elif portal == "govt":
+            if triggered_id == "preset-btn-1":
+                prompt_text = "Formulate an authoritative macro district infrastructure master plan across URC-1 and URC-2, evaluating RTE 30:1 classroom compliance and demographic growth."
+            elif triggered_id == "preset-btn-2":
+                prompt_text = f"Formulate an administrative capital budgeting and classroom expansion directive through Horizon {milestone} to address the +2,388 cumulative classroom deficit under RTE 30:1 norms."
+            elif triggered_id == "preset-btn-3":
+                prompt_text = "Issue an administrative policy directive under NEP 2020 §3.1 to halt the 38.4% secondary transition drop-off by establishing composite secondary complexes."
+            elif triggered_id == "preset-btn-4":
+                prompt_text = "Issue an executive district mandate for all cluster resource centers to deploy 60-day accelerated remedial bridge camps for the 27,235 at-risk student cohort."
         else:
-            prompt_text = "Explain the current district education data, total enrollment, gender parity, grade distribution, and operational metrics for Chhatrapati Sambhajinagar."
-    elif triggered_id == "preset-btn-2":
-        if portal == "school":
-            prompt_text = f"Explain the capacity stress forecast and classroom deficit for {sch_name or 'this institution'} through Milestone {milestone} under RTE 30:1 norms."
-        else:
-            prompt_text = f"Explain the Student Enrollment Forecast (2021 to 2037), the predictive demographic trajectory with 85% statistical confidence bounds, and the classroom deficit under RTE 30:1 norms for Milestone {milestone}."
-    elif triggered_id == "preset-btn-3":
-        if portal == "school":
-            prompt_text = f"Formulate an institutional remedial bridge action plan for the non-promoted learners at {sch_name or 'this institution'} citing Samagra Shiksha."
-        else:
-            prompt_text = "Analyze the student drop-off between Upper Primary (76k) and Secondary (47k) stages. Formulate statutory directives under NEP 2020 for secondary school expansion."
-    elif triggered_id == "preset-btn-4":
-        if portal == "school":
-            prompt_text = f"Synthesize an urgent statutory compliance action plan for {sch_name or 'this institution'} to meet RTE Act 30:1 PTR and female sanitation norms."
-        else:
-            prompt_text = "Propose an urgent administrative directive for the non-promoted students, citing Samagra Shiksha remedial bridge funding and fast-track learning recovery."
-    if not prompt_text or not prompt_text.strip():
-        return "", 0, True, html.Div("Please provide an executive policy prompt.", style={"color": COLOR_CRIMSON, "padding": "16px"}), True
+            # Public Citizen View
+            if triggered_id == "preset-btn-1":
+                prompt_text = "Explain our district's current public school enrollment, total student census, and how boys and girls are represented across schools in simple, accessible terms."
+            elif triggered_id == "preset-btn-2":
+                prompt_text = f"Explain the Student Enrollment Forecast (2021 to 2037) in plain language. What does this future enrollment mean for local families and why will our city need more classrooms through {milestone}?"
+            elif triggered_id == "preset-btn-3":
+                prompt_text = "Why is there a 38.4% drop-off in students between Class 8 and Class 9? Explain in plain language why students leave and what is being done to support them."
+            elif triggered_id == "preset-btn-4":
+                prompt_text = "Explain the remedial learning support program for the ~27,000 students who need extra help. How will extra practice in reading and math help these children catch up?"
+
+    if not prompt_text or not str(prompt_text).strip():
+        return no_update, "", html.Div("Please enter an inquiry or choose one of the preset prompts above.", style={"color": COLOR_CRIMSON, "padding": "16px"}), True
 
     school_info = None
     if portal == "school" and sch_name:
@@ -2596,14 +2567,49 @@ def initiate_rag_generation(
             "priority_tier": "STABLE"
         }
 
+    # If in government view and a school was searched or inspected, pass its dossier
+    searched_school_info = None
+    if portal == "govt" and school_search_val and str(school_search_val).strip():
+        q = str(school_search_val).strip().lower()
+        matched = df[
+            df["school_name"].astype(str).str.lower().str.contains(q)
+            | df["udise_code"].astype(str).str.lower().str.contains(q)
+            | df["block_name"].astype(str).str.lower().str.contains(q)
+        ]
+        if not matched.empty:
+            s_row = matched.iloc[0]
+            s_enrol = int(s_row.get("total_enrolment", 0))
+            s_rooms = int(s_row.get("functional_classrooms", max(1, round(s_enrol / 38.0))))
+            s_teachers = int(s_row.get("total_teachers", max(1, round(s_enrol / 34.0))))
+            searched_school_info = {
+                "school_name": str(s_row.get("school_name", "N/A")),
+                "udise_code": str(s_row.get("udise_code", "N/A")),
+                "total_enrolment": s_enrol,
+                "total_boys": int(s_row.get("total_boys", round(s_enrol * 0.52))),
+                "total_girls": int(s_row.get("total_girls", round(s_enrol * 0.48))),
+                "functional_classrooms": s_rooms,
+                "total_teachers": s_teachers,
+                "ptr": round(s_enrol / max(1.0, s_teachers), 1),
+                "promotion_rate": float(s_row.get("promotion_rate", 85.0)),
+                "pending_students": int(s_row.get("pending_students", 0)),
+                "readiness_score": float(s_row.get("readiness_score", 80.0)),
+                "block_name": str(s_row.get("block_name", "URC")),
+                "priority_tier": str(s_row.get("priority_tier", "STABLE"))
+            }
+
     try:
-        res = generate_education_policy_brief(user_prompt=prompt_text, school_info=school_info)
+        res = generate_education_policy_brief(
+            user_prompt=prompt_text,
+            school_info=school_info,
+            portal=portal,
+            searched_school=searched_school_info
+        )
     except Exception as e:
-        return "", 0, True, html.Div(f"Error during RAG synthesis: {str(e)}", style={"color": COLOR_CRIMSON, "padding": "16px"}), True
+        return prompt_text, "", html.Div(f"Error during RAG synthesis: {str(e)}", style={"color": COLOR_CRIMSON, "padding": "16px"}), True
 
     full_policy_text = res.get("policy_report", "")
 
-    # Clean Thinking Accordion (No casual emojis)
+    # Structured Thought Process / Reasoning Steps
     thinking_items = [
         html.Div(
             style={"display": "flex", "alignItems": "flex-start", "gap": "10px", "marginBottom": "6px"},
@@ -2682,36 +2688,7 @@ def initiate_rag_generation(
         )
     ])
 
-    return full_policy_text, len(full_policy_text), True, initial_view, False
-
-
-@app.callback(
-    Output("rag-streaming-text-target", "children"),
-    Output("rag-stream-cursor", "data", allow_duplicate=True),
-    Output("rag-typewriter-interval", "disabled", allow_duplicate=True),
-    Input("rag-typewriter-interval", "n_intervals"),
-    State("rag-full-text-store", "data"),
-    State("rag-stream-cursor", "data"),
-    prevent_initial_call=True
-)
-def stream_text_smooth(n, full_text, current_cursor):
-    if not full_text:
-        return no_update, 0, True
-
-    # Advance chunk by 7 characters per tick (25ms) for smooth satisfying typewriter animation
-    chunk_size = 7
-    next_cursor = current_cursor + chunk_size
-
-    if next_cursor >= len(full_text):
-        # Finalize and render formatted markdown document cleanly
-        return dcc.Markdown(full_text), len(full_text), True
-
-    partial_text = full_text[:next_cursor]
-    # Render with blinking cursor span without re-parsing markdown
-    return html.Span([
-        html.Span(partial_text),
-        html.Span(" ▌", className="cursor-blink")
-    ]), next_cursor, False
+    return prompt_text, full_policy_text, initial_view, False
 
 
 @app.callback(
@@ -2921,52 +2898,32 @@ def handle_navigation_and_auth(
 
     # 4. REQUEST SCHOOL PORTAL (FROM WELCOME OR DASHBOARD)
     if triggered in ["welcome-btn-school", "portal-tab-school"]:
-        if auth_session.get("school"):
-            sch_label = auth_session.get("school_name", "Institution Administrator")
-            return (
-                style_hidden, style_visible, "dashboard",
-                "school", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn",
-                style_hidden, style_visible, style_hidden, style_hidden,
-                style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
-                "", style_hidden, no_update, no_update, "school", auth_session,
-                f"Logged in: {sch_label}", {"display": "inline-block"},
-                style_hidden
-            )
-        else:
-            cfg = CREDENTIALS_CONFIG["school"]
-            return (
-                welcome_style, dashboard_style, current_page,
-                current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
-                sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
-                style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
-                "", style_hidden, "", "", "school", auth_session,
-                status_text, logout_style,
-                {"display": "block", "marginBottom": "14px"}
-            )
+        sch_label = auth_session.get("school_name", "Institution Administrator") if auth_session.get("school") else "Institution Assessment Mode"
+        status_display = f"Logged in: {sch_label}" if auth_session.get("school") else f"Active: {sch_label}"
+        log_style = {"display": "inline-block"} if auth_session.get("school") else {"display": "none"}
+        return (
+            style_hidden, style_visible, "dashboard",
+            "school", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn",
+            style_hidden, style_visible, style_hidden, style_hidden,
+            style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
+            "", style_hidden, no_update, no_update, "school", auth_session,
+            status_display, log_style,
+            style_hidden
+        )
 
     # 5. REQUEST GOVERNMENT PORTAL (FROM WELCOME OR DASHBOARD)
     if triggered in ["welcome-btn-govt", "portal-tab-govt"]:
-        if auth_session.get("govt"):
-            return (
-                style_hidden, style_visible, "dashboard",
-                "govt", "portal-tab-btn", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active",
-                style_visible, style_hidden, style_visible, style_visible,
-                style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
-                "", style_hidden, no_update, no_update, "govt", auth_session,
-                "Logged in: Government Official", {"display": "inline-block"},
-                style_hidden
-            )
-        else:
-            cfg = CREDENTIALS_CONFIG["govt"]
-            return (
-                welcome_style, dashboard_style, current_page,
-                current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
-                sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
-                style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
-                "", style_hidden, "", "", "govt", auth_session,
-                status_text, logout_style,
-                style_hidden
-            )
+        gov_status = "Logged in: Government Official" if auth_session.get("govt") else "Administrative Authority (Scenario Planning)"
+        log_style = {"display": "inline-block"} if auth_session.get("govt") else {"display": "none"}
+        return (
+            style_hidden, style_visible, "dashboard",
+            "govt", "portal-tab-btn", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active",
+            style_visible, style_hidden, style_visible, style_visible,
+            style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
+            "", style_hidden, no_update, no_update, "govt", auth_session,
+            gov_status, log_style,
+            style_hidden
+        )
 
     # 6. CANCEL AUTH MODAL
     if triggered == "auth-cancel-btn":
