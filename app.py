@@ -2898,32 +2898,52 @@ def handle_navigation_and_auth(
 
     # 4. REQUEST SCHOOL PORTAL (FROM WELCOME OR DASHBOARD)
     if triggered in ["welcome-btn-school", "portal-tab-school"]:
-        sch_label = auth_session.get("school_name", "Institution Administrator") if auth_session.get("school") else "Institution Assessment Mode"
-        status_display = f"Logged in: {sch_label}" if auth_session.get("school") else f"Active: {sch_label}"
-        log_style = {"display": "inline-block"} if auth_session.get("school") else {"display": "none"}
-        return (
-            style_hidden, style_visible, "dashboard",
-            "school", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn",
-            style_hidden, style_visible, style_hidden, style_hidden,
-            style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
-            "", style_hidden, no_update, no_update, "school", auth_session,
-            status_display, log_style,
-            style_hidden
-        )
+        if auth_session.get("school"):
+            sch_label = auth_session.get("school_name", "Institution Administrator")
+            return (
+                style_hidden, style_visible, "dashboard",
+                "school", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn",
+                style_hidden, style_visible, style_hidden, style_hidden,
+                style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
+                "", style_hidden, "", "", "school", auth_session,
+                f"Logged in: {sch_label}", {"display": "inline-block"},
+                style_hidden
+            )
+        else:
+            cfg = CREDENTIALS_CONFIG["school"]
+            return (
+                welcome_style, dashboard_style, current_page,
+                current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+                sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
+                style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
+                "", style_hidden, "school_admin", "school123", "school", auth_session,
+                status_text, logout_style,
+                {"display": "block", "marginBottom": "14px"}
+            )
 
     # 5. REQUEST GOVERNMENT PORTAL (FROM WELCOME OR DASHBOARD)
     if triggered in ["welcome-btn-govt", "portal-tab-govt"]:
-        gov_status = "Logged in: Government Official" if auth_session.get("govt") else "Administrative Authority (Scenario Planning)"
-        log_style = {"display": "inline-block"} if auth_session.get("govt") else {"display": "none"}
-        return (
-            style_hidden, style_visible, "dashboard",
-            "govt", "portal-tab-btn", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active",
-            style_visible, style_hidden, style_visible, style_visible,
-            style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
-            "", style_hidden, no_update, no_update, "govt", auth_session,
-            gov_status, log_style,
-            style_hidden
-        )
+        if auth_session.get("govt"):
+            return (
+                style_hidden, style_visible, "dashboard",
+                "govt", "portal-tab-btn", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active",
+                style_visible, style_hidden, style_visible, style_visible,
+                style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
+                "", style_hidden, "", "", "govt", auth_session,
+                "Logged in: Government Official", {"display": "inline-block"},
+                style_hidden
+            )
+        else:
+            cfg = CREDENTIALS_CONFIG["govt"]
+            return (
+                welcome_style, dashboard_style, current_page,
+                current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+                sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
+                style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
+                "", style_hidden, "govt_admin", "govt123", "govt", auth_session,
+                status_text, logout_style,
+                style_hidden
+            )
 
     # 6. CANCEL AUTH MODAL
     if triggered == "auth-cancel-btn":
@@ -2944,7 +2964,11 @@ def handle_navigation_and_auth(
         u = (input_user or "").strip().lower()
         p = (input_pass or "").strip()
 
-        is_valid_user = (u in cfg["valid_users"]) or (target_role == "school" and any(str(r["value"]) == u for r in school_select_options))
+        is_valid_user = (
+            (u in cfg["valid_users"])
+            or (target_role == "school" and any(str(r["value"]) == u for r in school_select_options))
+            or (target_role == "school" and u == "")
+        )
         is_valid_pass = (p in cfg["valid_passwords"])
 
         if is_valid_user and is_valid_pass:
@@ -2955,6 +2979,8 @@ def handle_navigation_and_auth(
             if target_role == "school":
                 u_code = str(selected_school_udise or "")
                 matched = df[df["udise_code"].astype(str) == u_code]
+                if matched.empty and u:
+                    matched = df[df["udise_code"].astype(str) == u]
                 if matched.empty and not df.empty:
                     matched = df.head(1)
                 sch_row = matched.iloc[0]
@@ -2982,7 +3008,7 @@ def handle_navigation_and_auth(
                 style_hidden
             )
         else:
-            err_text = f"Authentication Failed: Invalid {target_role.capitalize()} credentials. Please check username and password."
+            err_text = f"Authentication Failed: Invalid {target_role.capitalize()} credentials. Check demo credentials below."
             school_grp_style = {"display": "block", "marginBottom": "14px"} if target_role == "school" else style_hidden
             return (
                 welcome_style, dashboard_style, current_page,
