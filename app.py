@@ -1781,7 +1781,7 @@ app.layout = html.Div(
                 dcc.Textarea(
                     id="rag-prompt-input",
                     placeholder="Enter an inquiry or policy topic (e.g. 'Explain current data', 'Explain demographic forecast', 'Synthesize remedial policy directive')...",
-                    value="Explain the Student Enrollment Forecast (2021 to 2037), the predictive demographic trajectory with 85% statistical confidence bounds, and the classroom deficit under RTE 30:1 norms.",
+                    value="Explain our district's current public school enrollment, total student census, and how boys and girls are represented across schools in simple, accessible terms.",
                     style={
                         "width": "100%",
                         "height": "75px",
@@ -2426,54 +2426,101 @@ def handle_map_pin_click(click_data):
     Output("preset-btn-2", "children"),
     Output("preset-btn-3", "children"),
     Output("preset-btn-4", "children"),
+    Output("rag-prompt-input", "value", allow_duplicate=True),
+    Output("rag-output-container", "children", allow_duplicate=True),
+    Output("rag-full-text-store", "data", allow_duplicate=True),
+    Output("rag-download-pdf-btn", "disabled", allow_duplicate=True),
     Input("active-portal-store", "data"),
     Input("input-sch-name", "value"),
     Input("input-sch-udise", "value"),
     Input("school-horizon-milestone", "value"),
-    prevent_initial_call=False
+    prevent_initial_call="initial_duplicate"
 )
 def update_policy_assistant_header(portal, sch_name, sch_udise, milestone):
-    portal = portal or "citizen"
+    from dash import callback_context
+    portal = (portal or "citizen").lower()
     milestone = milestone or 2030
+
+    triggered = "active-portal-store"
+    try:
+        if callback_context.has_context and callback_context.triggered:
+            triggered = callback_context.triggered[0]["prop_id"].split(".")[0]
+    except Exception:
+        triggered = "active-portal-store"
+
+    should_reset_ui = (triggered in ["active-portal-store", ""])
+
     if portal == "school":
         name = sch_name or "Selected Institution"
         u_str = f" (UDISE: {sch_udise})" if sch_udise else ""
-        return (
-            f"Institution Action Copilot • {name}",
-            f"Personalized institutional diagnostics, PTR compliance, milestone {milestone} deficit, and tailored internal policy action plan for this specific school.",
-            "INSTITUTION ASSESSMENT",
-            "Audit My School's Profile & Gaps",
-            f"Classroom & PTR Deficit for {milestone}",
-            "Our Internal Remedial Bridge Action Plan",
-            "Institutional RTE & Sanitation Compliance Plan"
+        card_title = f"Institution Action Copilot • {name}"
+        card_sub = f"Personalized institutional diagnostics, PTR compliance, milestone {milestone} deficit, and tailored internal policy action plan for this specific school."
+        badge = "INSTITUTION ASSESSMENT"
+        b1 = "Audit My School's Profile & Gaps"
+        b2 = f"Classroom & PTR Deficit for {milestone}"
+        b3 = "Our Internal Remedial Bridge Action Plan"
+        b4 = "Institutional RTE & Sanitation Compliance Plan"
+        default_prompt = f"Provide a personalized diagnostic profile and infrastructure adequacy assessment for {name}{u_str} under RTE Act 30:1 standards."
+        ready_card = html.Div(
+            style={"padding": "24px", "backgroundColor": "#FFFFFF", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}", "textAlign": "center"},
+            children=[
+                html.Div(className="gov-ico gov-ico-school", style={"fontSize": "28px", "marginBottom": "8px", "color": COLOR_GOVT_BLUE}),
+                html.H4(f"Institution Diagnostic & Internal Policy Copilot • {name}", style={"margin": "0 0 6px 0", "fontSize": "16px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY}),
+                html.P(f"Select a preset button above to generate a diagnostic audit, milestone {milestone} capacity stress model, or internal operational action plan specifically for this institution.", style={"margin": "0 auto", "maxWidth": "620px", "fontSize": "13px", "color": COLOR_MUTED})
+            ]
         )
     elif portal == "govt":
+        card_title = "Policy & Planning Authority Copilot • District Administration"
+        card_sub = "Authoritative district development planning, statutory resource allocation (NEP 2020 / RTE Act / Samagra Shiksha), and school inspection dossiers."
+        badge = "GOVERNMENT AUTHORITY"
+        b1 = "District Infrastructure Master Plan"
+        b2 = f"Demographic Expansion & Capital Budgeting"
+        b3 = "Secondary Complex Hubs (Fix 38.4% Drop)"
+        b4 = "District-Wide Remedial Mandate (27k Cohort)"
+        default_prompt = "Formulate an authoritative macro district infrastructure master plan across URC-1 and URC-2, evaluating RTE 30:1 classroom compliance and demographic growth."
+        ready_card = html.Div(
+            style={"padding": "24px", "backgroundColor": "#FFFFFF", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}", "textAlign": "center"},
+            children=[
+                html.Div(className="gov-ico gov-ico-govt", style={"fontSize": "28px", "marginBottom": "8px", "color": COLOR_PRIMARY_NAVY}),
+                html.H4("District Education & Infrastructure Planning Authority", style={"margin": "0 0 6px 0", "fontSize": "16px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY}),
+                html.P("Select an executive directive preset above or enter a policy topic to synthesize statutory planning decisions across URC-1 & URC-2 or generate targeted school inspection dossiers.", style={"margin": "0 auto", "maxWidth": "620px", "fontSize": "13px", "color": COLOR_MUTED})
+            ]
+        )
+    else:
+        card_title = "Public Education Guide • Chhatrapati Sambhajinagar"
+        card_sub = "Understand district schools, student numbers, gender parity, and community learning support in clear, accessible terms."
+        badge = "PUBLIC CITIZEN VIEW"
+        b1 = "District Schools & Student Census"
+        b2 = "Understanding the 2021–2037 Forecast"
+        b3 = "Why Secondary School Seats Drop Off"
+        b4 = "Help for Struggling Students (Remedial)"
+        default_prompt = "Explain our district's current public school enrollment, total student census, and how boys and girls are represented across schools in simple, accessible terms."
+        ready_card = html.Div(
+            style={"padding": "24px", "backgroundColor": "#FFFFFF", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}", "textAlign": "center"},
+            children=[
+                html.Div(className="gov-ico gov-ico-citizen", style={"fontSize": "28px", "marginBottom": "8px", "color": COLOR_PINE}),
+                html.H4("Public Education Community Guide", style={"margin": "0 0 6px 0", "fontSize": "16px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY}),
+                html.P("Understand our district's schools, student numbers, gender balance, and remedial support programs in simple, jargon-free language. Click any preset button above or type your question below.", style={"margin": "0 auto", "maxWidth": "620px", "fontSize": "13px", "color": COLOR_MUTED})
+            ]
+        )
+
+    if should_reset_ui:
         return (
-            "Policy & Planning Authority Copilot • District Administration",
-            "Authoritative district development planning, statutory resource allocation (NEP 2020 / RTE Act / Samagra Shiksha), and school inspection dossiers.",
-            "GOVERNMENT AUTHORITY",
-            "District Infrastructure Master Plan",
-            f"Demographic Expansion & Capital Budgeting",
-            "Secondary Complex Hubs (Fix 38.4% Drop)",
-            "District-Wide Remedial Mandate (27k Cohort)"
+            card_title, card_sub, badge, b1, b2, b3, b4,
+            default_prompt, ready_card, "", True
         )
     else:
         return (
-            "Public Education Guide • Chhatrapati Sambhajinagar",
-            "Understand district schools, student numbers, gender parity, and community learning support in clear, accessible terms.",
-            "PUBLIC CITIZEN VIEW",
-            "District Schools & Student Census",
-            "Understanding the 2021–2037 Forecast",
-            "Why Secondary School Seats Drop Off",
-            "Help for Struggling Students (Remedial)"
+            card_title, card_sub, badge, b1, b2, b3, b4,
+            no_update, no_update, no_update, no_update
         )
 
 
 @app.callback(
-    Output("rag-prompt-input", "value"),
-    Output("rag-full-text-store", "data"),
-    Output("rag-output-container", "children"),
-    Output("rag-download-pdf-btn", "disabled"),
+    Output("rag-prompt-input", "value", allow_duplicate=True),
+    Output("rag-full-text-store", "data", allow_duplicate=True),
+    Output("rag-output-container", "children", allow_duplicate=True),
+    Output("rag-download-pdf-btn", "disabled", allow_duplicate=True),
     Input("rag-submit-btn", "n_clicks"),
     Input("preset-btn-1", "n_clicks"),
     Input("preset-btn-2", "n_clicks"),
@@ -2481,6 +2528,7 @@ def update_policy_assistant_header(portal, sch_name, sch_udise, milestone):
     Input("preset-btn-4", "n_clicks"),
     State("rag-prompt-input", "value"),
     State("active-portal-store", "data"),
+    State("auth-session-store", "data"),
     State("input-sch-name", "value"),
     State("input-sch-udise", "value"),
     State("input-sch-enrol", "value"),
@@ -2495,21 +2543,64 @@ def update_policy_assistant_header(portal, sch_name, sch_udise, milestone):
     prevent_initial_call=True
 )
 def initiate_rag_generation(
-    btn_submit, btn1, btn2, btn3, btn4, prompt_text, portal,
+    btn_submit, btn1, btn2, btn3, btn4, prompt_text, portal, auth_session,
     sch_name, sch_udise, sch_enrol, sch_boys, sch_girls, sch_rooms, sch_teachers, sch_promo, sch_pend, sch_milestone,
     school_search_val
 ):
-    from dash import callback_context
-    triggered_id = callback_context.triggered[0]["prop_id"].split(".")[0] if callback_context.triggered else "rag-submit-btn"
+    triggered_id = "rag-submit-btn"
+    try:
+        if callback_context.has_context and callback_context.triggered:
+            triggered_id = callback_context.triggered[0]["prop_id"].split(".")[0]
+    except Exception:
+        triggered_id = "rag-submit-btn"
     portal = (portal or "citizen").lower()
     milestone = sch_milestone or 2030
+
+    school_info = None
+    if portal == "school":
+        target_udise = str(sch_udise or (auth_session and auth_session.get("school_udise")) or "")
+        matched = df[df["udise_code"].astype(str) == target_udise] if target_udise else pd.DataFrame()
+        if matched.empty and not df.empty:
+            matched = df.head(1)
+        row = matched.iloc[0] if not matched.empty else {}
+
+        name = sch_name or row.get("school_name", "Model Institution")
+        code = sch_udise or row.get("udise_code", "27191001234")
+        enrol = float(sch_enrol if sch_enrol is not None else row.get("total_enrolment", 350))
+        boys = float(sch_boys if sch_boys is not None else row.get("total_boys", round(enrol * 0.52)))
+        girls = float(sch_girls if sch_girls is not None else row.get("total_girls", round(enrol * 0.48)))
+        rooms = float(sch_rooms if sch_rooms is not None else row.get("functional_classrooms", max(1, round(enrol / 38.0))))
+        teachers = float(sch_teachers if sch_teachers is not None else row.get("total_teachers", max(1, round(enrol / 34.0))))
+        promo = float(sch_promo if sch_promo is not None else row.get("promotion_rate", 85.5))
+        pend = float(sch_pend if sch_pend is not None else row.get("pending_students", 25))
+        target_year = int(sch_milestone or 2030)
+
+        school_info = {
+            "school_name": str(name),
+            "udise_code": str(code),
+            "total_enrolment": enrol,
+            "total_boys": boys,
+            "total_girls": girls,
+            "functional_classrooms": rooms,
+            "total_teachers": teachers,
+            "promotion_rate": promo,
+            "pending_students": pend,
+            "target_year": target_year,
+            "ptr": round(enrol / max(1.0, teachers), 1),
+            "gpi": round(girls / max(1.0, boys), 2),
+            "classroom_gap": max(0, int(round((enrol / 30.0) - rooms))),
+            "teacher_gap": max(0, int(round((enrol / 30.0) - teachers))),
+            "target_deficit": max(0, int(round(((enrol * (1.0 + 0.02 * (target_year - 2025))) / 30.0) - rooms))),
+            "readiness_score": 82.5,
+            "priority_tier": "STABLE"
+        }
 
     # If triggered by a preset button, generate role-tailored prompt and update the input area
     if triggered_id.startswith("preset-btn-"):
         if portal == "school":
-            s_label = sch_name or "this institution"
+            s_label = sch_name or (school_info and school_info.get("school_name")) or "this institution"
             u_label = f" (UDISE: {sch_udise})" if sch_udise else ""
-            p_count = int(sch_pend or 0)
+            p_count = int(sch_pend if sch_pend is not None else (school_info and school_info.get("pending_students")) or 25)
             if triggered_id == "preset-btn-1":
                 prompt_text = f"Provide a personalized diagnostic profile and infrastructure adequacy assessment for {s_label}{u_label} under RTE Act 30:1 standards."
             elif triggered_id == "preset-btn-2":
@@ -2540,32 +2631,6 @@ def initiate_rag_generation(
 
     if not prompt_text or not str(prompt_text).strip():
         return no_update, "", html.Div("Please enter an inquiry or choose one of the preset prompts above.", style={"color": COLOR_CRIMSON, "padding": "16px"}), True
-
-    school_info = None
-    if portal == "school" and sch_name:
-        enrol = float(sch_enrol or 0)
-        teachers = float(sch_teachers or 1)
-        rooms = float(sch_rooms or 1)
-        target_year = int(sch_milestone or 2030)
-        school_info = {
-            "school_name": sch_name or "Audited Institution",
-            "udise_code": sch_udise or "N/A",
-            "total_enrolment": enrol,
-            "total_boys": float(sch_boys or 0),
-            "total_girls": float(sch_girls or 0),
-            "functional_classrooms": rooms,
-            "total_teachers": teachers,
-            "promotion_rate": float(sch_promo or 85.0),
-            "pending_students": float(sch_pend or 0),
-            "target_year": target_year,
-            "ptr": round(enrol / max(1.0, teachers), 1),
-            "gpi": round(float(sch_girls or 0) / max(1.0, float(sch_boys or 1)), 2),
-            "classroom_gap": max(0, int(round((enrol / 30.0) - rooms))),
-            "teacher_gap": max(0, int(round((enrol / 30.0) - teachers))),
-            "target_deficit": max(0, int(round(((enrol * (1.0 + 0.02 * (target_year - 2025))) / 30.0) - rooms))),
-            "readiness_score": 82.5,
-            "priority_tier": "STABLE"
-        }
 
     # If in government view and a school was searched or inspected, pass its dossier
     searched_school_info = None

@@ -209,9 +209,31 @@ class RAGPolicyEngine:
         statutory_context, sources = self.retrieve_statutory_context(prompt_query)
 
         # ---------------------------------------------------------------------
-        # 1. PERSONA-SPECIFIC THINKING / TRACE STEPS
         # ---------------------------------------------------------------------
-        if portal == "school" and school_info:
+        # 1. PERSONA-SPECIFIC THINKING / TRACE STEPS & CONTEXT PREPARATION
+        # ---------------------------------------------------------------------
+        if portal == "school":
+            if not school_info:
+                school_info = {
+                    "school_name": "Model Primary & Secondary School",
+                    "udise_code": "27191001001",
+                    "total_enrolment": 380,
+                    "total_boys": 198,
+                    "total_girls": 182,
+                    "functional_classrooms": 10,
+                    "total_teachers": 11,
+                    "ptr": 34.5,
+                    "gpi": 0.92,
+                    "promotion_rate": 86.4,
+                    "pending_students": 28,
+                    "target_year": 2030,
+                    "classroom_gap": 3,
+                    "teacher_gap": 2,
+                    "target_deficit": 4,
+                    "readiness_score": 81.0,
+                    "priority_tier": "EXPANSION_PRIORITY"
+                }
+
             s_name = school_info.get("school_name", "Audited Institution")
             s_udise = school_info.get("udise_code", "N/A")
             s_rooms = int(school_info.get("functional_classrooms", 0))
@@ -221,10 +243,10 @@ class RAGPolicyEngine:
             s_def = int(school_info.get("target_deficit", 0))
             thinking_steps = [
                 f"Auditing authenticated institutional record: {s_name} (UDISE: {s_udise}).",
-                f"Evaluating campus capacity: {s_rooms} classrooms & {s_teachers} teachers (PTR {s_ptr}:1 vs RTE 30:1 statutory ceiling).",
-                f"Modeling cohort progression through Milestone {s_tyear}: Net space requirement of +{s_def} classrooms.",
-                f"Scanning FAISS statutory repository: Benchmarking against NEP 2020 §3.1, RTE Act 2009 §19, and Samagra Shiksha FLN.",
-                f"Synthesizing personalized institutional policy directive and internal operational roadmap.",
+                f"Evaluating campus capacity: {s_rooms} functional classrooms & {s_teachers} teachers (PTR {s_ptr}:1 vs RTE statutory 30:1 ceiling).",
+                f"Modeling cohort progression through Planning Horizon {s_tyear}: Projecting net deficit of +{s_def} classrooms.",
+                f"Scanning FAISS statutory repository: Benchmarking against RTE Act 2009 §19, Samagra Shiksha FLN, and institutional safety norms.",
+                f"Synthesizing personalized institutional diagnostic brief and internal school operational policy roadmap.",
             ]
         elif portal == "govt":
             thinking_steps = [
@@ -235,7 +257,7 @@ class RAGPolicyEngine:
             if searched_school:
                 sch_qname = searched_school.get("school_name", "Target School")
                 sch_qudise = searched_school.get("udise_code", "N/A")
-                thinking_steps.append(f"Executing targeted administrative compliance inspection on {sch_qname} (UDISE: {sch_qudise}).")
+                thinking_steps.append(f"Executing targeted administrative regulatory compliance audit on {sch_qname} (UDISE: {sch_qudise}).")
             else:
                 thinking_steps.append("Analyzing macro cohort transition attrition: 38.4% drop-off between Upper Primary and Secondary.")
             thinking_steps.append("Synthesizing authoritative administrative decision brief with statutory directives and capital allocations.")
@@ -254,71 +276,132 @@ class RAGPolicyEngine:
         # ---------------------------------------------------------------------
         if portal == "citizen":
             persona_instructions = """
-### ROLE & PERSONA: PUBLIC CITIZEN EDUCATION GUIDE
-- Your audience: Parents, citizens, students, and community members in Chhatrapati Sambhajinagar.
-- Tone: Welcoming, plain-language, transparent, educational, and encouraging.
-- STRICT GUIDELINE: DO NOT use legalistic bureaucratic terms (NO 'statutory directives', NO 'penal compliance', NO 'sanction memos').
-- Structure your response into clear, friendly sections:
-  1. Our Schools & Student Community at a Glance (explain the 954 schools, 278,945 students, and 0.93 GPI in simple terms).
-  2. Understanding the Student Journey Across Grade Stages (explain Primary to Higher Secondary numbers).
-  3. The Secondary School Challenge (explain simply why 38.4% drop-off happens after Class 8 and why secondary school access matters).
-  4. Extra Help for Students (explain the ~27,000 students getting extra tutoring so no child is left behind).
-  5. Looking Ahead (explain why city growth means more classrooms will be needed).
+### ROLE & PERSONA: PUBLIC CITIZEN EDUCATION GUIDE (COMMUNITY DATA EXPLAINER)
+- Audience: Parents, residents, students, and citizens of Chhatrapati Sambhajinagar.
+- Core Mission: Help everyday citizens understand WHAT the school data means, HOW the education system works, and WHY community indicators matter.
+- STRICT INSTRUCTIONS:
+  1. Use clear, accessible, respectful language. ZERO administrative or bureaucratic jargon (NEVER use terms like 'sanction memo', 'statutory penal directive', 'administrative compliance order', or 'capital allocation').
+  2. Structure your response into clear, formal sections:
+     - Section 1: Our District Schools & Student Census Explained (explain what 954 schools and 278,945 students mean for our city).
+     - Section 2: Gender Representation & Girls' Education (explain what the 0.93 Gender Parity Index means in real life: 93 girls for every 100 boys, and why dedicated sanitation and safety help keep girls in school).
+     - Section 3: Student Flow Across Grade Stages (explain Primary Classes 1-5, Upper Primary Classes 6-8, Secondary Classes 9-10, and Higher Secondary Classes 11-12).
+     - Section 4: Why Does the Transition Drop-Off Occur Between Class 8 and Class 9? (explain in plain words why 38.4% of students drop off after Class 8: lack of nearby secondary schools, travel distance, and why creating composite schools nearby helps).
+     - Section 5: Remedial Learning: Helping Every Child Catch Up (explain the ~27,000 students needing support, how bridge tutoring helps foundational reading and math without failing students).
+     - Section 6: Planning for City Growth to 2037 (explain why 350,000+ projected students means adding ~2,388 classrooms to keep class sizes comfortable).
 """
-        elif portal == "school" and school_info:
+            full_prompt = f"""You are NITI DRISHTI Public Education Guide for Chhatrapati Sambhajinagar.
+{persona_instructions}
+
+### DISTRICT DATA CONTEXT:
+- Total Institutions: {audit['total_schools']} ({audit['active_schools']} active, 99.5% operational stability)
+- Student Population: {audit['total_students']:,} ({audit['boys']:,} Boys | {audit['girls']:,} Girls | Gender Parity Index: {audit['gpi']})
+- Grade Distribution: Primary: {audit['enrol_primary']:,} | Upper Primary: {audit['enrol_upper_primary']:,} | Secondary: {audit['enrol_secondary']:,} ({drop_rate}% drop-off) | Higher Secondary: {audit['enrol_higher_secondary']:,}
+- Promotion Performance: {audit['promo_rate']}% pass rate | Students needing remedial catch-up: {audit['pending_students']:,}
+- Growth Outlook: Urban enrollment expanding to 350,573 children by 2037 (+2,388 new classrooms planned to maintain 30 students per room).
+
+### USER QUESTION:
+{user_prompt if user_prompt else 'Explain our district public schools and student data in simple, clear terms.'}
+
+### OPERATIONAL FORMATTING:
+- Deliver clear Markdown with structured headings, clean bullet points, and welcoming, easy-to-read prose.
+- Strictly adhere to the citizen guide persona (NO legalistic bureaucratic jargon).
+"""
+        elif portal == "school":
             s_name = school_info.get("school_name", "Audited Institution")
             s_udise = school_info.get("udise_code", "N/A")
+            s_enrol = int(school_info.get("total_enrolment", 0))
+            s_boys = int(school_info.get("total_boys", 0))
+            s_girls = int(school_info.get("total_girls", 0))
+            s_rooms = int(school_info.get("functional_classrooms", 0))
+            s_teachers = int(school_info.get("total_teachers", 0))
+            s_ptr = round(float(school_info.get("ptr", 30)), 1)
+            s_promo = round(float(school_info.get("promotion_rate", 85.0)), 1)
+            s_pending = int(school_info.get("pending_students", 0))
+            s_tyear = int(school_info.get("target_year", 2030))
+            s_score = round(float(school_info.get("readiness_score", 80)), 1)
+            s_tier = school_info.get("priority_tier", "STABLE")
+            s_cg = int(school_info.get("classroom_gap", 0))
+            s_tg = int(school_info.get("teacher_gap", 0))
+            s_def = int(school_info.get("target_deficit", 0))
+
             persona_instructions = f"""
-### ROLE & PERSONA: INSTITUTION DIAGNOSTIC COPILOT ({s_name} - UDISE: {s_udise})
-- Your audience: School Principal, Headmaster, and Institutional Management Committee.
-- Tone: Diagnostic, actionable, precise, institutional.
-- STRICT GUIDELINE: Focus STRICTLY and EXCLUSIVELY on this specific institution's metrics, capacity gaps, and internal operational policy.
-- Address:
-  1. Institutional Diagnostic Baseline (Enrolment: {school_info.get('total_enrolment')}, Classrooms: {school_info.get('functional_classrooms')}, Teachers: {school_info.get('total_teachers')}, PTR: {school_info.get('ptr')}:1, Promo Rate: {school_info.get('promotion_rate')}%, Remedial learners: {school_info.get('pending_students')}).
-  2. Immediate Deficits & Milestone {school_info.get('target_year', 2030)} Capacity Need (+{school_info.get('target_deficit', 0)} classrooms).
-  3. Personal Institute Policy & Internal Action Directives (Remedial bridge program for {school_info.get('pending_students')} students, timetable optimization, teacher allocation, female sanitation).
-  4. Phased Internal Implementation Roadmap (30-day, 90-day, and school year targets).
+### ROLE & PERSONA: INSTITUTION DIAGNOSTIC & INTERNAL POLICY COPILOT
+- Institution Under Audit: {s_name} (UDISE: {s_udise})
+- Audience: School Principal, Headmaster, School Management Committee (SMC), and Faculty.
+- Core Mission: Provide a strictly personalized institutional diagnostic assessment and internal operational policy action plan ONLY for this particular school.
+- STRICT INSTRUCTIONS:
+  1. DO NOT discuss district-wide city planning, macro municipal budgeting, or general city statistics. Concentrate EXCLUSIVELY on this specific institution.
+  2. Base every recommendation on this school's exact data:
+     - Enrolment: {s_enrol:,} ({s_girls:,} Girls | {s_boys:,} Boys, GPI: {school_info.get('gpi', 0.93)})
+     - Facilities: {s_rooms} functional classrooms (Classroom Gap: +{s_cg} rooms under RTE 30:1)
+     - Staffing: {s_teachers} teachers (PTR: {s_ptr}:1 vs RTE 30:1 statutory ceiling; Teacher Gap: +{s_tg})
+     - Academic Performance: {s_promo}% pass rate, with {s_pending:,} students requiring remedial support
+     - Milestone {s_tyear} Deficit: Net need of +{s_def} classrooms
+  3. Structure the formal institutional report:
+     - Section 1: Executive Diagnostic Summary for {s_name} (detailed breakdown of verified metrics).
+     - Section 2: Statutory Compliance Audit under RTE Act 2009 (PTR evaluation, classroom adequacy, girl child sanitation).
+     - Section 3: Internal School Policy Directives:
+       * Directive 1: Targeted Remedial Bridge Protocol for the {s_pending} at-risk learners.
+       * Directive 2: Timetable & Physical Space Optimization across the {s_rooms} functional rooms.
+       * Directive 3: Faculty Workload Re-balancing to meet the 30:1 statutory PTR limit.
+     - Section 4: Target Horizon Milestone {s_tyear} Expansion Plan (absorbing cohort growth).
+     - Section 5: Institutional Implementation Timeline (Immediate 0-30 days, 60-180 days, and Academic Year targets).
+"""
+            full_prompt = f"""You are NITI DRISHTI Institutional Diagnostic Copilot.
+{persona_instructions}
+
+### RELEVANT STATUTORY GUIDELINES:
+{statutory_context}
+
+### USER INQUIRY:
+{user_prompt if user_prompt else f'Provide a personalized diagnostic profile and internal operational action plan for {s_name}.'}
+
+### OPERATIONAL FORMATTING:
+- Deliver clear Markdown with structured headings, clean tables, and actionable operational directives for school leadership.
+- Focus exclusively on {s_name} (NO district-wide city planning).
 """
         else:
             # Government Official View
             searched_context_str = ""
             if searched_school:
                 searched_context_str = f"""
-### TARGET INSTITUTION ADMINISTRATIVE INSPECTION DOSSIER:
-- Inspected Institution: {searched_school.get('school_name')} (UDISE: {searched_school.get('udise_code')})
-- Active Enrolment: {searched_school.get('total_enrolment')} students ({searched_school.get('total_boys')} Boys | {searched_school.get('total_girls')} Girls)
-- Physical Facilities: {searched_school.get('functional_classrooms')} classrooms | Teaching Cadre: {searched_school.get('total_teachers')} (PTR: {searched_school.get('ptr')}:1)
-- Promotion Performance: {searched_school.get('promotion_rate')}% pass rate | At-Risk Students: {searched_school.get('pending_students')}
-- Institutional Readiness Score: {searched_school.get('readiness_score')}/100 | Tier: {searched_school.get('priority_tier')}
-- Ward / Block: {searched_school.get('block_name')}
+### TARGET INSTITUTION ADMINISTRATIVE INSPECTION DOSSIER (SEARCHED INSTITUTION):
+- Name: {searched_school.get('school_name')} (UDISE: {searched_school.get('udise_code')})
+- Location: {searched_school.get('block_name')} | Priority Tier: {searched_school.get('priority_tier')}
+- Student Census: {searched_school.get('total_enrolment')} ({searched_school.get('total_boys')} Boys, {searched_school.get('total_girls')} Girls)
+- Physical Classrooms: {searched_school.get('functional_classrooms')} | Teachers: {searched_school.get('total_teachers')} (PTR: {searched_school.get('ptr')}:1)
+- Performance: {searched_school.get('promotion_rate')}% Promotion Rate | Remedial Learners: {searched_school.get('pending_students')}
+- Readiness Score: {searched_school.get('readiness_score')}/100
 """
             persona_instructions = f"""
 ### ROLE & PERSONA: DISTRICT EDUCATION & INFRASTRUCTURE PLANNING AUTHORITY
-- Your audience: District Collector, Director of School Education, Municipal Commissioners, Urban Planners.
-- Tone: Authoritative, executive, macro-strategic, policy-driven.
-- Focus: District-wide infrastructure development, capital budgeting, RTE 30:1 compliance, what-if scenario levers, and statutory frameworks (NEP 2020 §3.1, RTE Act 2009 §19, Samagra Shiksha 2024).
+- Audience: District Collector, Director of School Education, Municipal Commissioners, Urban Infrastructure Planners.
+- Core Mission: Provide an authoritative, executive macro district infrastructure master plan and statutory policy synthesis across URC-1 and URC-2.
 {searched_context_str}
-- If a target institution is provided above: In addition to district macro planning, include an official Administrative School Inspection Dossier with statutory directives issued specifically to this institution's management.
+- STRICT INSTRUCTIONS:
+  1. Adopt an authoritative, formal administrative tone with legalistic citations (NEP 2020 §3.1, RTE Act 2009 §19, Samagra Shiksha Framework 2024).
+  2. Structure the formal administrative directive:
+     - Section 1: District Executive Intelligence Brief (macro metrics across 954 institutions, 278,945 students in URC-1 & URC-2).
+     - Section 2: Demographic Horizon 2037 Capital Works Assessment (projected growth to 350,573 students; +2,388 cumulative classroom requirement under RTE 30:1).
+     - Section 3: Statutory Policy Interventions:
+       * Policy Directive I: Composite Secondary School Complex Expansion (reversing the 38.4% drop-off between Upper Primary and Secondary under NEP 2020 §3.1).
+       * Policy Directive II: District-Wide Remedial Learning Recovery Mandate (60-day FLN camps for the 27,235 at-risk student cohort under Samagra Shiksha).
+       * Policy Directive III: RTE Statutory Norm Enforcement (PTR 30:1 enforcement across urban wards and 100% female sanitation).
+     - Section 4: Capital Expenditure & Phased Allocation Matrix (Tranche I 2025-2027, Tranche II 2028-2032, Tranche III 2033-2037).
 """
-
-        school_data_block = ""
-        if school_info:
-            school_data_block = f"""
-### AUDITED INSTITUTION PROFILE:
-- School: {school_info.get('school_name')} (UDISE: {school_info.get('udise_code')})
-- Students: {int(school_info.get('total_enrolment', 0))} ({int(school_info.get('total_girls', 0))} Girls | {int(school_info.get('total_boys', 0))} Boys)
-- Classrooms: {int(school_info.get('functional_classrooms', 0))} | Teachers: {int(school_info.get('total_teachers', 0))} (PTR: {school_info.get('ptr')}:1)
-- Pass Rate: {school_info.get('promotion_rate')}% | Pending Remedial: {int(school_info.get('pending_students', 0))}
-- Target Milestone {school_info.get('target_year', 2030)} Deficit: {int(school_info.get('target_deficit', 0))} classrooms
+            if searched_school:
+                persona_instructions += f"""
+     - Section 5: Target Institution Administrative Inspection Dossier & Binding Directives for {searched_school.get('school_name')}:
+       * Provide an official regulatory compliance audit on this specific institution.
+       * Issue binding administrative mandates to the school head and Block Education Officer (civil expansion, teacher redeployment, remedial monitoring).
 """
-
-        full_prompt = f"""You are NITI DRISHTI AI, specialized exclusively in the urban education ecosystem of Chhatrapati Sambhajinagar.
+            full_prompt = f"""You are NITI DRISHTI Policy Authority for Chhatrapati Sambhajinagar District Administration.
 {persona_instructions}
-{school_data_block}
+
 ### DISTRICT BASELINE DATA (URC-1 & URC-2 Urban Core):
 - Total Institutions: {audit['total_schools']} ({audit['active_schools']} active, 99.5% operational stability)
 - Student Population: {audit['total_students']:,} ({audit['boys']:,} Boys | {audit['girls']:,} Girls | Gender Parity Index: {audit['gpi']})
-- Grade Distribution: Primary: {audit['enrol_primary']:,} | Upper Primary: {audit['enrol_upper_primary']:,} | Secondary: {audit['enrol_secondary']:,} (38.4% drop-off) | Higher Secondary: {audit['enrol_higher_secondary']:,}
+- Grade Distribution: Primary: {audit['enrol_primary']:,} | Upper Primary: {audit['enrol_upper_primary']:,} | Secondary: {audit['enrol_secondary']:,} ({drop_rate}% drop-off) | Higher Secondary: {audit['enrol_higher_secondary']:,}
 - Promotion Performance: {audit['promo_rate']}% pass rate | Pending Remedial Students: {audit['pending_students']:,}
 - Readiness Score: {audit['readiness_score']} / 100
 - Demographic Horizon 2037: Projected growth to 350,573 students (+71,628 expansion; +2,388 classrooms needed under RTE 30:1)
@@ -327,11 +410,11 @@ class RAGPolicyEngine:
 {statutory_context}
 
 ### USER INQUIRY:
-{user_prompt if user_prompt else 'Explain the education infrastructure diagnostics and key insights.'}
+{user_prompt if user_prompt else 'Formulate an authoritative macro district infrastructure master plan across URC-1 and URC-2.'}
 
 ### OPERATIONAL FORMATTING:
-- Deliver clear Markdown with structured headings, clean bullet points, and data precision.
-- Strictly adhere to the requested persona tone and scope.
+- Deliver clear Markdown with structured headings, clean tables, and authoritative administrative decision memos.
+- Strictly adhere to the government planning authority persona.
 """
 
         # ---------------------------------------------------------------------
@@ -342,13 +425,12 @@ class RAGPolicyEngine:
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=gemini_key)
-                # Test modern supported models with fast timeout
-                for model_name in ["gemini-3.1-flash-lite", "gemini-3.8-flash"]:
+                for model_name in ["gemini-flash-lite-latest", "gemini-flash-latest"]:
                     try:
                         model = genai.GenerativeModel(model_name)
                         response = model.generate_content(
                             full_prompt,
-                            request_options={"timeout": 7}
+                            request_options={"timeout": 12}
                         )
                         if response and response.text:
                             return {
@@ -442,7 +524,7 @@ When students complete Class 8 and look to enter Class 9, our district observes 
 """
             sources = ["Chhatrapati Sambhajinagar Education Census 2024", "Right to Education Public Standards", "Samagra Shiksha Community Guide"]
 
-        elif portal == "school" and school_info:
+        elif portal == "school":
             s_name = school_info.get("school_name", "Audited Institution")
             s_udise = school_info.get("udise_code", "N/A")
             s_enrol = int(school_info.get("total_enrolment", 0))
