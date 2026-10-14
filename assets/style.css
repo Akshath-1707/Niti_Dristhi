@@ -1405,6 +1405,52 @@ a:hover {
   cursor: pointer;
 }
 
+/* Modal Portal Chooser Buttons */
+.auth-role-choice-btn {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  background-color: #FFFFFF;
+  border: 1px solid var(--gov-border);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.15s ease-in-out;
+}
+
+.auth-role-choice-btn:hover {
+  background-color: #F1F5F9;
+  border-color: var(--gov-blue);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.auth-role-choice-btn:active {
+  transform: scale(0.99);
+}
+
+.gov-nav-login-btn {
+  background-color: #FFFFFF;
+  color: var(--gov-navy);
+  border: 1px solid #CADBE9;
+  border-radius: var(--radius-button);
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.gov-nav-login-btn:hover {
+  background-color: #F1F5F9;
+  border-color: var(--gov-blue);
+  color: var(--gov-blue);
+}
+
 /* Thinking Box for Policy Assistant */
 .thinking-container {
   background-color: #F8FAFC;

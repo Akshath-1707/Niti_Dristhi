@@ -116,16 +116,27 @@ else:
     df_forecast = pd.read_csv(df_forecast_path)
 
 # Dropdown options
-block_options = [{"label": "All Areas / Blocks", "value": "ALL"}] + [
-    {"label": str(b), "value": str(b)} for b in sorted(df["block_name"].dropna().unique())
-] if "block_name" in df.columns else []
+block_options = [
+    {"label": "All Areas / Blocks", "value": "ALL"},
+    {"label": "URC-1 (Urban Resource Centre 1)", "value": "URC1"},
+    {"label": "URC-2 (Urban Resource Centre 2)", "value": "URC2"},
+]
 
-mgmt_options = [{"label": "All School Types", "value": "ALL"}] + [
-    {"label": str(m), "value": str(m)} for m in sorted(df["school_management"].dropna().unique())
-] if "school_management" in df.columns else []
+CATEGORY_LABELS = {
+    1: "Primary Only (Classes 1–5)",
+    2: "Primary with Upper Primary (Classes 1–8)",
+    3: "Composite Primary to Higher Sec (Classes 1–12)",
+    5: "Upper Primary to Higher Sec (Classes 6–12)",
+    6: "Primary with Upper Primary & Secondary (Classes 1–10)",
+    7: "Upper Primary with Secondary (Classes 6–10)",
+    8: "Secondary Only (Classes 9–10)",
+    10: "Secondary with Higher Sec (Classes 9–12)",
+    11: "Higher Secondary Only (Classes 11–12)",
+}
 
 category_options = [{"label": "All Grade Levels", "value": "ALL"}] + [
-    {"label": str(c), "value": str(c)} for c in sorted(df["school_category"].dropna().unique())
+    {"label": CATEGORY_LABELS.get(int(c), f"Category {c}"), "value": str(c)}
+    for c in sorted(df["school_category"].dropna().unique())
 ] if "school_category" in df.columns else []
 
 tier_options = [
@@ -136,7 +147,7 @@ tier_options = [
 ]
 
 school_select_options = [
-    {"label": f"{r['school_name']} (UDISE: {r['udise_code']})", "value": str(r["udise_code"])}
+    {"label": f"{r['school_name']} (UDISE: {r['udise_code']} • {r['block_name']})", "value": str(r["udise_code"])}
     for _, r in df.sort_values("total_enrolment", ascending=False).iterrows()
 ]
 
@@ -208,57 +219,97 @@ app.layout = html.Div(
                             ]
                         ),
                         html.H3(id="auth-modal-title", style={"margin": "0 0 6px 0", "fontSize": "17px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY}, children="Institutional Authentication"),
-                        html.P(id="auth-modal-subtitle", style={"margin": "0 0 16px 0", "fontSize": "12.5px", "color": COLOR_MUTED, "lineHeight": "1.5"}, children="Enter authorized official credentials to access the institution assessment portal or scenario planning tools."),
+                        html.P(id="auth-modal-subtitle", style={"margin": "0 0 16px 0", "fontSize": "12.5px", "color": COLOR_MUTED, "lineHeight": "1.5"}, children="Select your administrative role or portal authority to proceed with authenticated clearance."),
 
-                        html.Div(id="auth-error-banner", className="auth-error-banner", children=""),
-
-                        # Institution selector placeholder (Active only for Institution Assessment Portal)
+                        # Role Chooser Step (Two distinct options: Educational Institute vs Government Authority)
                         html.Div(
-                            id="auth-school-group",
-                            className="auth-input-group",
-                            style={"display": "none"},
+                            id="auth-role-chooser-container",
+                            style={"display": "flex", "flexDirection": "column", "gap": "10px", "marginBottom": "16px"},
                             children=[
-                                html.Label("Select Your School / Institution", className="auth-input-label"),
-                                dcc.Dropdown(
-                                    id="auth-school-dropdown",
-                                    options=school_select_options,
-                                    value=str(school_select_options[0]["value"]) if school_select_options else None,
-                                    placeholder="Type school name or UDISE code to search...",
-                                    clearable=False,
-                                    style={"fontSize": "12.5px"}
+                                html.P("Select your administrative authority:", style={"fontSize": "12.5px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY, "margin": "0 0 4px 0"}),
+                                html.Button(
+                                    id="btn-choose-login-school",
+                                    n_clicks=0,
+                                    className="auth-role-choice-btn",
+                                    children=[
+                                        html.Div(className="gov-ico gov-ico-school", style={"fontSize": "22px", "color": COLOR_GOVT_BLUE, "flexShrink": 0}),
+                                        html.Div([
+                                            html.Div("Educational Institute", style={"fontSize": "13.5px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY}),
+                                            html.Div("School Principal / Institutional Facility Administrator", style={"fontSize": "11.5px", "color": COLOR_MUTED})
+                                        ])
+                                    ]
+                                ),
+                                html.Button(
+                                    id="btn-choose-login-govt",
+                                    n_clicks=0,
+                                    className="auth-role-choice-btn",
+                                    children=[
+                                        html.Div(className="gov-ico gov-ico-govt", style={"fontSize": "22px", "color": COLOR_PRIMARY_NAVY, "flexShrink": 0}),
+                                        html.Div([
+                                            html.Div("Government Authority", style={"fontSize": "13.5px", "fontWeight": "700", "color": COLOR_PRIMARY_NAVY}),
+                                            html.Div("District Collector / Education Planning Officer / Policy Analyst", style={"fontSize": "11.5px", "color": COLOR_MUTED})
+                                        ])
+                                    ]
                                 )
                             ]
                         ),
 
+                        # Credentials Form Container (Displayed when a role is selected)
                         html.Div(
-                            className="auth-input-group",
+                            id="auth-credentials-form-container",
+                            style={"display": "block"},
                             children=[
-                                html.Label("Official Username / ID", className="auth-input-label"),
-                                dcc.Input(id="auth-username-input", type="text", className="auth-text-input", placeholder="Enter official ID / UDISE code", n_submit=0)
-                            ]
-                        ),
-                        html.Div(
-                            className="auth-input-group",
-                            children=[
-                                html.Label("Security Password / PIN", className="auth-input-label"),
-                                dcc.Input(id="auth-password-input", type="password", className="auth-text-input", placeholder="Enter password / PIN", n_submit=0)
-                            ]
-                        ),
+                                html.Div(id="auth-error-banner", className="auth-error-banner", children=""),
 
-                        html.Div(
-                            className="auth-btn-row",
-                            children=[
-                                html.Button("Verify Credentials", id="auth-submit-btn", n_clicks=0, className="btn-auth-submit"),
-                                html.Button("Cancel / Public View", id="auth-cancel-btn", n_clicks=0, className="btn-auth-cancel")
-                            ]
-                        ),
+                                # Institution selector placeholder (Active only for Institution Assessment Portal)
+                                html.Div(
+                                    id="auth-school-group",
+                                    className="auth-input-group",
+                                    style={"display": "none"},
+                                    children=[
+                                        html.Label("Select Your School / Institution", className="auth-input-label"),
+                                        dcc.Dropdown(
+                                            id="auth-school-dropdown",
+                                            options=school_select_options,
+                                            value=str(school_select_options[0]["value"]) if school_select_options else None,
+                                            placeholder="Type school name or UDISE code to search...",
+                                            clearable=False,
+                                            style={"fontSize": "12.5px"}
+                                        )
+                                    ]
+                                ),
 
-                        html.Div(
-                            id="auth-demo-hint-box",
-                            className="auth-demo-hint",
-                            children=[
-                                html.Span("Administrative Access: ", style={"fontWeight": "600"}),
-                                html.Span(id="auth-demo-hint-text", children="Username: school_admin | Password: school123")
+                                html.Div(
+                                    className="auth-input-group",
+                                    children=[
+                                        html.Label("Official Username / ID", className="auth-input-label"),
+                                        dcc.Input(id="auth-username-input", type="text", className="auth-text-input", placeholder="Enter official ID / UDISE code", n_submit=0)
+                                    ]
+                                ),
+                                html.Div(
+                                    className="auth-input-group",
+                                    children=[
+                                        html.Label("Security Password / PIN", className="auth-input-label"),
+                                        dcc.Input(id="auth-password-input", type="password", className="auth-text-input", placeholder="Enter password / PIN", n_submit=0)
+                                    ]
+                                ),
+
+                                html.Div(
+                                    className="auth-btn-row",
+                                    children=[
+                                        html.Button("Verify Credentials", id="auth-submit-btn", n_clicks=0, className="btn-auth-submit"),
+                                        html.Button("Cancel / Public View", id="auth-cancel-btn", n_clicks=0, className="btn-auth-cancel")
+                                    ]
+                                ),
+
+                                html.Div(
+                                    id="auth-demo-hint-box",
+                                    className="auth-demo-hint",
+                                    children=[
+                                        html.Span("Administrative Access: ", style={"fontWeight": "600"}),
+                                        html.Span(id="auth-demo-hint-text", children="Username: school_admin | Password: school123")
+                                    ]
+                                )
                             ]
                         )
                     ]
@@ -343,15 +394,25 @@ app.layout = html.Div(
                                 html.Li(html.A("Home", href="#", className="gov-nav-item gov-nav-item-active")),
                                 html.Li(html.A("District Profile", href="#section-district-glance", className="gov-nav-item")),
                                 html.Li(html.A("Infrastructure", href="#section-sectors", className="gov-nav-item")),
-                                html.Li(html.A("Analytics", href="#section-services", className="gov-nav-item")),
-                                html.Li(html.A("Reports", href="#section-reports", className="gov-nav-item")),
-                                html.Li(html.A("Documents", href="#section-framework", className="gov-nav-item")),
                                 html.Li(html.A("Methodology", href="#section-methodology", className="gov-nav-item")),
                                 html.Li(html.A("About", href="#section-data-sources", className="gov-nav-item")),
                                 html.Li(html.A("Contact", href="#section-footer", className="gov-nav-item")),
                             ]
                         ),
-                        html.Button("View District Dashboard →", id="welcome-btn-enter-dashboard", n_clicks=0, className="gov-nav-cta-btn")
+                        html.Div(
+                            style={"display": "flex", "alignItems": "center", "gap": "10px"},
+                            children=[
+                                html.Button(
+                                    id="nav-btn-portal-login",
+                                    n_clicks=0,
+                                    className="gov-nav-login-btn",
+                                    children=[
+                                        html.Span(className="gov-ico gov-ico-lock", style={"width": "14px", "height": "14px"}),
+                                        html.Span("Portal Login ▾")
+                                    ]
+                                )
+                            ]
+                        )
                     ]
                 ),
 
@@ -601,127 +662,7 @@ app.layout = html.Div(
                             ]
                         ),
 
-                        # 4. Explore NITI DRISHTI / Main Services
-                        html.Div(
-                            id="section-services",
-                            children=[
-                                html.Div(
-                                    className="gov-section-header",
-                                    children=[
-                                        html.Div([
-                                            html.Span("DECISION SUPPORT PORTALS", className="gov-section-tag"),
-                                            html.H3("EXPLORE NITI DRISHTI", className="gov-section-title"),
-                                            html.P("Access district information, infrastructure assessments, analytical tools and planning resources.", className="gov-section-desc")
-                                        ])
-                                    ]
-                                ),
-                                html.Div(
-                                    className="gov-services-grid",
-                                    children=[
-                                        # MODULE 1: District & Citizen Information
-                                        html.Div(
-                                            className="gov-service-card",
-                                            children=[
-                                                html.Div([
-                                                    html.Div(
-                                                        className="gov-service-card-header",
-                                                        children=[
-                                                            html.Div(
-                                                                className="gov-service-card-title-group",
-                                                                children=[
-                                                                    html.Div(className="gov-service-icon-box", children=[
-                                                                        html.Span(className="gov-ico gov-ico-chart")
-                                                                    ]),
-                                                                    html.H4("District & Citizen Information", className="gov-service-title")
-                                                                ]
-                                                            ),
-                                                            html.Span("PUBLIC ACCESS", className="status-pill status-pill-green")
-                                                        ]
-                                                    ),
-                                                    html.P("Access district-level infrastructure indicators, school information, readiness metrics and geographic information.", className="gov-service-desc")
-                                                ]),
-                                                html.Button("View District Dashboard →", id="welcome-btn-citizen", n_clicks=0, className="gov-service-btn")
-                                            ]
-                                        ),
-                                        # MODULE 2: Institution Assessment
-                                        html.Div(
-                                            className="gov-service-card",
-                                            children=[
-                                                html.Div([
-                                                    html.Div(
-                                                        className="gov-service-card-header",
-                                                        children=[
-                                                            html.Div(
-                                                                className="gov-service-card-title-group",
-                                                                children=[
-                                                                    html.Div(className="gov-service-icon-box", children=[
-                                                                        html.Span(className="gov-ico gov-ico-education")
-                                                                    ]),
-                                                                    html.H4("Institution Assessment", className="gov-service-title")
-                                                                ]
-                                                            ),
-                                                            html.Span("INSTITUTIONAL", className="status-pill status-pill-cyan")
-                                                        ]
-                                                    ),
-                                                    html.P("Review institution-level infrastructure indicators, compliance metrics and identified facility gaps.", className="gov-service-desc")
-                                                ]),
-                                                html.Button("View Institution Assessment →", id="welcome-btn-school", n_clicks=0, className="gov-service-btn")
-                                            ]
-                                        ),
-                                        # MODULE 3: Infrastructure Scenario Analysis
-                                        html.Div(
-                                            className="gov-service-card",
-                                            children=[
-                                                html.Div([
-                                                    html.Div(
-                                                        className="gov-service-card-header",
-                                                        children=[
-                                                            html.Div(
-                                                                className="gov-service-card-title-group",
-                                                                children=[
-                                                                    html.Div(className="gov-service-icon-box", children=[
-                                                                        html.Span(className="gov-ico gov-ico-seal")
-                                                                    ]),
-                                                                    html.H4("Infrastructure Scenario Analysis", className="gov-service-title")
-                                                                ]
-                                                            ),
-                                                            html.Span("POLICY MAKERS", className="status-pill status-pill-cyan")
-                                                        ]
-                                                    ),
-                                                    html.P("Evaluate the potential impact of infrastructure interventions under different planning scenarios.", className="gov-service-desc")
-                                                ]),
-                                                html.Button("Open Scenario Analysis →", id="welcome-btn-govt", n_clicks=0, className="gov-service-btn")
-                                            ]
-                                        ),
-                                        # MODULE 4: Policy & Planning Assistant
-                                        html.Div(
-                                            className="gov-service-card",
-                                            children=[
-                                                html.Div([
-                                                    html.Div(
-                                                        className="gov-service-card-header",
-                                                        children=[
-                                                            html.Div(
-                                                                className="gov-service-card-title-group",
-                                                                children=[
-                                                                    html.Div(className="gov-service-icon-box", children=[
-                                                                        html.Span(className="gov-ico gov-ico-doc")
-                                                                    ]),
-                                                                    html.H4("Policy & Planning Assistant", className="gov-service-title")
-                                                                ]
-                                                            ),
-                                                            html.Span("AI-ASSISTED", className="status-pill status-pill-green")
-                                                        ]
-                                                    ),
-                                                    html.P("Retrieve and summarize relevant policy documents, statutory guidelines and planning information.", className="gov-service-desc")
-                                                ]),
-                                                html.Button("Open Policy Assistant →", id="welcome-btn-copilot", n_clicks=0, className="gov-service-btn")
-                                            ]
-                                        ),
-                                    ]
-                                )
-                            ]
-                        ),
+
 
                         # 5. District Infrastructure Map Section
                         html.Div(
@@ -958,75 +899,6 @@ app.layout = html.Div(
                             ]
                         ),
 
-                        # 9. Reports & Documents
-                        html.Div(
-                            id="section-reports",
-                            children=[
-                                html.Div(
-                                    className="gov-section-header",
-                                    children=[
-                                        html.Div([
-                                            html.Span("PUBLICATION ARCHIVE", className="gov-section-tag"),
-                                            html.H3("REPORTS & DOCUMENTS", className="gov-section-title"),
-                                            html.P("Official decision-support deliverables and statutory planning frameworks.", className="gov-section-desc")
-                                        ])
-                                    ]
-                                ),
-                                html.Div(
-                                    className="gov-reports-grid",
-                                    children=[
-                                        html.Div(
-                                            className="gov-report-item",
-                                            children=[
-                                                html.Div(
-                                                    className="gov-report-info",
-                                                    children=[
-                                                        html.Span(className="gov-ico gov-ico-doc"),
-                                                        html.Div([
-                                                            html.Div("District Infrastructure Assessment", className="gov-report-title"),
-                                                            html.Div("Verified Statutory Policy Directive • 2026", className="gov-report-meta")
-                                                        ])
-                                                    ]
-                                                ),
-                                                html.Span("PDF", className="status-pill status-pill-cyan")
-                                            ]
-                                        ),
-                                        html.Div(
-                                            className="gov-report-item",
-                                            children=[
-                                                html.Div(
-                                                    className="gov-report-info",
-                                                    children=[
-                                                        html.Span(className="gov-ico gov-ico-doc"),
-                                                        html.Div([
-                                                            html.Div("Readiness Index Methodology Framework", className="gov-report-title"),
-                                                            html.Div("4-Pillar Formulation Specification", className="gov-report-meta")
-                                                        ])
-                                                    ]
-                                                ),
-                                                html.Span("DOC", className="status-pill status-pill-cyan")
-                                            ]
-                                        ),
-                                        html.Div(
-                                            className="gov-report-item",
-                                            children=[
-                                                html.Div(
-                                                    className="gov-report-info",
-                                                    children=[
-                                                        html.Span(className="gov-ico gov-ico-doc"),
-                                                        html.Div([
-                                                            html.Div("Demographic Forecast Report (2021–2037)", className="gov-report-title"),
-                                                            html.Div("Cohort Projection & Capacity Deficit", className="gov-report-meta")
-                                                        ])
-                                                    ]
-                                                ),
-                                                html.Span("DATA", className="status-pill status-pill-cyan")
-                                            ]
-                                        ),
-                                    ]
-                                )
-                            ]
-                        ),
 
                         # 10. Important Links
                         html.Div(
@@ -1095,7 +967,6 @@ app.layout = html.Div(
                                             children=[
                                                 html.Li(html.A("District Profile", href="#section-district-glance")),
                                                 html.Li(html.A("Infrastructure Sectors", href="#section-sectors")),
-                                                html.Li(html.A("Explore Services", href="#section-services")),
                                                 html.Li(html.A("Geospatial Map", href="#section-map")),
                                                 html.Li(html.A("Latest Updates", href="#section-updates")),
                                             ]
@@ -1113,7 +984,6 @@ app.layout = html.Div(
                                                 html.Li(html.A("Methodology", href="#section-methodology")),
                                                 html.Li(html.A("Data Sources", href="#section-data-sources")),
                                                 html.Li(html.A("Readiness Framework", href="#section-framework")),
-                                                html.Li(html.A("Reports & Documents", href="#section-reports")),
                                                 html.Li(html.A("External Portals", href="#section-links")),
                                             ]
                                         )
@@ -1191,21 +1061,29 @@ app.layout = html.Div(
                 ),
 
                 # ===================================================================
-                # MULTI-PERSONA PORTAL NAVIGATION (GOVERNMENT STYLE)
+                # PORTAL CONTEXT HEADER & ISOLATED ROLE CLEARANCE BAR
                 # ===================================================================
                 html.Div(
                     className="portal-nav-bar",
                     children=[
-                        html.Span("ACTIVE PORTAL:", style={"fontSize": "11px", "fontWeight": "700", "color": COLOR_MUTED, "letterSpacing": "0.5px", "marginLeft": "4px"}),
-                        html.Button("Public Citizen View", id="portal-tab-citizen", n_clicks=0, className="portal-tab-btn portal-tab-btn-active"),
-                        html.Button("Institution Assessment Portal", id="portal-tab-school", n_clicks=0, className="portal-tab-btn"),
-                        html.Button("Infrastructure Scenario Analysis", id="portal-tab-govt", n_clicks=0, className="portal-tab-btn"),
+                        # Dedicated portal badge displaying current clearance
+                        html.Span("ACTIVE PORTAL:", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_MUTED, "letterSpacing": "0.5px", "marginLeft": "4px"}),
+                        html.Span(
+                            id="portal-active-badge-display",
+                            children="PUBLIC CITIZEN VIEW",
+                            className="status-pill status-pill-green",
+                            style={"fontSize": "11px", "fontWeight": "700", "padding": "4px 10px"}
+                        ),
+                        # Hidden elements to preserve callback contract without breaking dependencies
+                        html.Button("Public Citizen View", id="portal-tab-citizen", n_clicks=0, className="portal-tab-btn portal-tab-btn-active", style={"display": "none"}),
+                        html.Button("Institution Assessment Portal", id="portal-tab-school", n_clicks=0, className="portal-tab-btn", style={"display": "none"}),
+                        html.Button("Infrastructure Scenario Analysis", id="portal-tab-govt", n_clicks=0, className="portal-tab-btn", style={"display": "none"}),
                         dcc.Store(id="active-portal-store", data="citizen"),
                         html.Div(
                             id="portal-auth-status-container",
                             style={"marginLeft": "auto", "display": "flex", "alignItems": "center", "gap": "10px"},
                             children=[
-                                html.Span(id="portal-auth-status-text", children="Public Citizen (Direct Access)", style={"fontSize": "12px", "color": COLOR_MUTED, "fontWeight": "600"}),
+                                html.Span(id="portal-auth-status-text", children="Public Citizen (Open Direct Access)", style={"fontSize": "12px", "color": COLOR_MUTED, "fontWeight": "600"}),
                                 html.Button("Logout", id="portal-logout-btn", n_clicks=0, className="btn-auth-logout", style={"display": "none"})
                             ]
                         )
@@ -1306,7 +1184,56 @@ app.layout = html.Div(
                     ]
                 ),
                 # Dynamic Executive Infrastructure Intelligence Console
-                html.Div(id="govt-infra-intelligence-panel")
+                html.Div(id="govt-infra-intelligence-panel"),
+
+                # GOVERNMENT ADMINISTRATIVE SCHOOL INSPECTION & SEARCH DOSSIER
+                html.Div(
+                    className="executive-card",
+                    style={"marginTop": "20px", "border": f"1px solid {COLOR_BORDER}"},
+                    children=[
+                        html.Div(
+                            style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "14px", "flexWrap": "wrap", "gap": "14px"},
+                            children=[
+                                html.Div([
+                                    html.Span("OFFICIAL INSTITUTIONAL DOSSIER & SEARCH CONSOLE", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_GOVT_BLUE, "letterSpacing": "0.5px"}),
+                                    html.H3("School Search & Official Institutional Profile", style={"margin": "2px 0 0 0", "fontSize": "17px", "fontWeight": "800", "color": COLOR_PITCH}),
+                                    html.P("Search any district institution by name or 11-digit UDISE code to inspect its comprehensive operational profile, facility adequacy metrics, faculty ratio, and statutory 3-step action plan.", style={"margin": "2px 0 0 0", "fontSize": "12.5px", "color": COLOR_MUTED})
+                                ]),
+                                html.Span("ADMINISTRATIVE INSPECTOR ACTIVE", className="status-pill status-pill-cyan")
+                            ]
+                        ),
+
+                        # Search Bar Row
+                        html.Div(
+                            style={"display": "flex", "gap": "12px", "marginBottom": "16px", "alignItems": "center"},
+                            children=[
+                                html.Div(
+                                    style={"flex": "1"},
+                                    children=[
+                                        dcc.Dropdown(
+                                            id="school-search-input",
+                                            options=school_select_options,
+                                            placeholder="Type school name or 11-digit UDISE code to view suggestions...",
+                                            searchable=True,
+                                            clearable=True,
+                                            style={"fontSize": "13px"}
+                                        )
+                                    ]
+                                ),
+                                html.Button(
+                                    "Clear Search",
+                                    id="clear-search-btn",
+                                    n_clicks=0,
+                                    className="btn-outline",
+                                    style={"height": "36px", "whiteSpace": "nowrap"}
+                                )
+                            ]
+                        ),
+
+                        # Dynamic Complete School Details Dossier Card
+                        html.Div(id="facility-inspector-container")
+                    ]
+                )
             ]
         ),
 
@@ -1441,6 +1368,7 @@ app.layout = html.Div(
                         ),
                         html.Div(
                             className="ribbon-grid",
+                            style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "14px"},
                             children=[
                                 html.Div([
                                     html.Label("Select Area / Block", className="filter-label"),
@@ -1452,16 +1380,7 @@ app.layout = html.Div(
                                     )
                                 ]),
                                 html.Div([
-                                    html.Label("School Type", className="filter-label"),
-                                    dcc.Dropdown(
-                                        id="filter-mgmt",
-                                        options=mgmt_options,
-                                        value="ALL",
-                                        clearable=False
-                                    )
-                                ]),
-                                html.Div([
-                                    html.Label("Grade Level", className="filter-label"),
+                                    html.Label("Grade Level / School Category", className="filter-label"),
                                     dcc.Dropdown(
                                         id="filter-category",
                                         options=category_options,
@@ -1470,7 +1389,7 @@ app.layout = html.Div(
                                     )
                                 ]),
                                 html.Div([
-                                    html.Label("Performance Status", className="filter-label"),
+                                    html.Label("Performance Status Tier", className="filter-label"),
                                     dcc.Dropdown(
                                         id="filter-tier",
                                         options=tier_options,
@@ -1688,7 +1607,7 @@ app.layout = html.Div(
                                     style={"display": "flex", "alignItems": "center", "gap": "8px"},
                                     children=[
                                         html.Span(id="map-school-count-badge", className="status-pill status-pill-cyan"),
-                                        html.Span("CLICK PIN TO INSPECT DOSSIER", className="status-pill status-pill-green")
+                                        html.Span("GEOSPATIAL DIRECTORY", className="status-pill status-pill-green")
                                     ]
                                 )
                             ]
@@ -1698,46 +1617,6 @@ app.layout = html.Div(
                             config={"displayModeBar": True, "scrollZoom": True},
                             style={"borderRadius": "8px", "overflow": "hidden", "border": f"1px solid {COLOR_BORDER}"}
                         )
-                    ]
-                ),
-
-                # SECTION 3: INSTITUTIONAL SEARCH & COMPREHENSIVE SCHOOL DETAILS
-                html.Div(
-                    className="executive-card",
-                    children=[
-                        html.Div(
-                            style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "14px", "flexWrap": "wrap", "gap": "14px"},
-                            children=[
-                                html.Div([
-                                    html.Span("INSTITUTIONAL SEARCH & COMPLETE DETAILS", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_GOVT_BLUE, "letterSpacing": "0.5px"}),
-                                    html.H3("School Search & Institutional Profile", style={"margin": "2px 0 0 0", "fontSize": "17px", "fontWeight": "800", "color": COLOR_PITCH}),
-                                    html.P("Search any school by name, 11-digit UDISE code, or click any pin on the map above to view its complete operational dossier, facility numbers, staffing, and 3-step action plan.", style={"margin": "2px 0 0 0", "fontSize": "12.5px", "color": COLOR_MUTED})
-                                ]),
-                                html.Span("SEARCH CONSOLE ACTIVE", className="status-pill status-pill-cyan")
-                            ]
-                        ),
-
-                        # Search Bar Row
-                        html.Div(
-                            style={"display": "flex", "gap": "12px", "marginBottom": "16px"},
-                            children=[
-                                dcc.Input(
-                                    id="school-search-input",
-                                    type="text",
-                                    className="search-input-field",
-                                    placeholder="Type school name, UDISE code (e.g. 27191001234), or block to inspect complete details..."
-                                ),
-                                html.Button(
-                                    "Clear Search",
-                                    id="clear-search-btn",
-                                    n_clicks=0,
-                                    className="btn-outline"
-                                )
-                            ]
-                        ),
-
-                        # Dynamic Complete School Details Dossier Card
-                        html.Div(id="facility-inspector-container")
                     ]
                 )
             ]
@@ -1870,7 +1749,6 @@ app.layout = html.Div(
     Output("govt-infra-intelligence-panel", "children"),
     # Inputs from Top Command Ribbon & Search
     Input("filter-block", "value"),
-    Input("filter-mgmt", "value"),
     Input("filter-category", "value"),
     Input("filter-tier", "value"),
     Input("school-search-input", "value"),
@@ -1881,20 +1759,17 @@ app.layout = html.Div(
     Input("sim-w-ret", "value"),
     Input("sim-w-cap", "value")
 )
-def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selected_tier, search_query, horizon_year, sim_classrooms, w_eq, w_pr, w_ret, w_cap):
+def update_entire_dashboard(selected_block, selected_cat, selected_tier, search_query, horizon_year, sim_classrooms, w_eq, w_pr, w_ret, w_cap):
     filtered = df.copy()
 
     if selected_block and selected_block != "ALL" and "block_name" in filtered.columns:
-        filtered = filtered[filtered["block_name"] == selected_block]
-
-    if selected_mgmt and selected_mgmt != "ALL" and "school_management" in filtered.columns:
-        filtered = filtered[filtered["school_management"] == selected_mgmt]
+        filtered = filtered[filtered["block_name"].astype(str).str.upper().str.replace("-", "") == str(selected_block).upper().replace("-", "")]
 
     if selected_cat and selected_cat != "ALL" and "school_category" in filtered.columns:
-        filtered = filtered[filtered["school_category"] == selected_cat]
+        filtered = filtered[filtered["school_category"].astype(str) == str(selected_cat)]
 
     if selected_tier and selected_tier != "ALL" and "priority_tier" in filtered.columns:
-        filtered = filtered[filtered["priority_tier"] == selected_tier]
+        filtered = filtered[filtered["priority_tier"].astype(str) == str(selected_tier)]
 
     # Search filter & Complete Institutional Profile Dossier
     school_to_inspect = None
@@ -2060,10 +1935,11 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
             ]
         )
     else:
+        msg = f"No institution found matching '{search_query}'. Please verify the school name or 11-digit UDISE code." if search_query and search_query.strip() else "No institutions match the current filter combination. Select 'All Areas' or 'All Grade Levels' above to broaden results."
         inspector_card = html.Div(
             style={"backgroundColor": "#F8FAFC", "padding": "20px", "borderRadius": "8px", "border": f"1px solid {COLOR_BORDER}", "textAlign": "center"},
             children=[
-                html.P(f"No institution found matching '{search_query}'. Please verify the school name or 11-digit UDISE code.", style={"margin": "0", "fontSize": "13px", "color": COLOR_CRIMSON})
+                html.P(msg, style={"margin": "0", "fontSize": "13px", "color": COLOR_MUTED})
             ]
         )
 
@@ -2394,7 +2270,7 @@ def update_entire_dashboard(selected_block, selected_mgmt, selected_cat, selecte
     prevent_initial_call=True
 )
 def handle_clear_search(n_clicks):
-    return ""
+    return None
 
 
 @app.callback(
@@ -2410,6 +2286,10 @@ def handle_map_pin_click(click_data):
         udise = str(point["customdata"][0])
         return udise
     elif "hovertext" in point and point["hovertext"]:
+        h_text = str(point["hovertext"]).strip().lower()
+        matched = df[df["school_name"].astype(str).str.lower() == h_text]
+        if not matched.empty:
+            return str(matched.iloc[0]["udise_code"])
         return str(point["hovertext"])
     return no_update
 
@@ -2549,7 +2429,9 @@ def initiate_rag_generation(
 ):
     triggered_id = "rag-submit-btn"
     try:
-        if callback_context.has_context and callback_context.triggered:
+        if getattr(callback_context, "triggered_id", None):
+            triggered_id = str(callback_context.triggered_id)
+        elif callback_context.has_context and callback_context.triggered:
             triggered_id = callback_context.triggered[0]["prop_id"].split(".")[0]
     except Exception:
         triggered_id = "rag-submit-btn"
@@ -2811,6 +2693,9 @@ CREDENTIALS_CONFIG = {
     Output("portal-tab-citizen", "className"),
     Output("portal-tab-school", "className"),
     Output("portal-tab-govt", "className"),
+    Output("portal-tab-citizen", "style"),
+    Output("portal-tab-school", "style"),
+    Output("portal-tab-govt", "style"),
     Output("section-govt-sim-sandbox", "style"),
     Output("section-school-admin-view", "style"),
     Output("section-district-overview", "style"),
@@ -2829,26 +2714,29 @@ CREDENTIALS_CONFIG = {
     Output("auth-password-input", "value"),
     Output("pending-role-target-store", "data"),
     Output("auth-session-store", "data"),
-    # Portal Auth Status Indicator
+    # Portal Auth Status Indicator & Clearance Badge
     Output("portal-auth-status-text", "children"),
     Output("portal-logout-btn", "style"),
+    Output("portal-active-badge-display", "children"),
+    Output("portal-active-badge-display", "className"),
     Output("auth-school-group", "style"),
-    # Inputs: Welcome Navigation
-    Input("welcome-btn-enter-dashboard", "n_clicks"),
+    Output("auth-role-chooser-container", "style"),
+    Output("auth-credentials-form-container", "style"),
+    # Inputs: Welcome Navigation & Login Button
+    Input("nav-btn-portal-login", "n_clicks"),
     Input("welcome-btn-hero-launch", "n_clicks"),
     Input("welcome-btn-hero-explore", "n_clicks"),
-    Input("welcome-btn-citizen", "n_clicks"),
-    Input("welcome-btn-copilot", "n_clicks"),
     Input("welcome-btn-map-launch", "n_clicks"),
     Input("welcome-btn-map-launch-2", "n_clicks"),
-    Input("welcome-btn-school", "n_clicks"),
-    Input("welcome-btn-govt", "n_clicks"),
+    # Inputs: Modal Role Chooser Buttons
+    Input("btn-choose-login-school", "n_clicks"),
+    Input("btn-choose-login-govt", "n_clicks"),
     # Inputs: Dashboard Tabs & Header
     Input("portal-tab-citizen", "n_clicks"),
     Input("portal-tab-school", "n_clicks"),
     Input("portal-tab-govt", "n_clicks"),
     Input("dashboard-btn-back-home", "n_clicks"),
-    # Inputs: Auth Modal
+    # Inputs: Auth Modal Actions
     Input("auth-cancel-btn", "n_clicks"),
     Input("auth-submit-btn", "n_clicks"),
     Input("auth-username-input", "n_submit"),
@@ -2865,8 +2753,8 @@ CREDENTIALS_CONFIG = {
     prevent_initial_call=True
 )
 def handle_navigation_and_auth(
-    n_enter, n_hero, n_explore, n_cit, n_cop, n_map1, n_map2,
-    w_sch, w_gov,
+    n_nav_login, n_hero, n_explore, n_map1, n_map2,
+    c_sch, c_gov,
     p_cit, p_sch, p_gov,
     n_home, n_cancel, n_submit, n_sub_user, n_sub_pass, n_logout,
     auth_session, pending_role, current_page, current_portal,
@@ -2894,12 +2782,39 @@ def handle_navigation_and_auth(
     tab_school_cls = "portal-tab-btn portal-tab-btn-active" if current_portal == "school" else "portal-tab-btn"
     tab_govt_cls = "portal-tab-btn portal-tab-btn-active" if current_portal == "govt" else "portal-tab-btn"
 
-    sec_govt_style = style_visible if current_portal == "govt" else style_hidden
-    sec_school_style = style_visible if current_portal == "school" else style_hidden
-    sec_district_style = style_hidden if current_portal == "school" else style_visible
-    sec_map_dir_style = style_hidden if current_portal == "school" else style_visible
+    # Tab elements are always hidden in DOM
+    tab_cit_style = style_hidden
+    tab_sch_style = style_hidden
+    tab_gov_style = style_hidden
 
-    # Status indicator
+    # Strict Persona Isolation:
+    # 1. School: Only school private diagnostic audit
+    # 2. Govt: Only government scenario analysis sandbox
+    # 3. Citizen: District overview, KPI cards, charts, GIS map & school directory
+    if current_portal == "school":
+        sec_govt_style = style_hidden
+        sec_school_style = style_visible
+        sec_district_style = style_hidden
+        sec_map_dir_style = style_hidden
+        badge_text = "INSTITUTION ASSESSMENT PORTAL"
+        badge_class = "status-pill status-pill-cyan"
+    elif current_portal == "govt":
+        sec_govt_style = style_visible
+        sec_school_style = style_hidden
+        sec_district_style = style_hidden
+        sec_map_dir_style = style_hidden
+        badge_text = "GOVERNMENT SCENARIO ANALYSIS"
+        badge_class = "status-pill status-pill-amber"
+    else:
+        # Citizen
+        sec_govt_style = style_hidden
+        sec_school_style = style_hidden
+        sec_district_style = style_visible
+        sec_map_dir_style = style_visible
+        badge_text = "PUBLIC CITIZEN VIEW"
+        badge_class = "status-pill status-pill-green"
+
+    # Status indicator & Logout button
     if auth_session.get("school") and current_portal == "school":
         sch_label = auth_session.get("school_name", "Institution Administrator")
         status_text = f"Logged in: {sch_label}"
@@ -2909,7 +2824,7 @@ def handle_navigation_and_auth(
         logout_style = {"display": "inline-block"}
     else:
         status_text = "Public Citizen View (Open Access)"
-        logout_style = {"display": "none"}
+        logout_style = style_hidden
 
     cfg = CREDENTIALS_CONFIG.get(pending_role, CREDENTIALS_CONFIG["school"])
     modal_title = cfg["title"]
@@ -2919,17 +2834,19 @@ def handle_navigation_and_auth(
     modal_badge = cfg["badge"]
     demo_hint = cfg["hint"]
 
-    # 1. LOGOUT
+    # 1. LOGOUT (Reverts to Public Citizen View and clears authenticated session)
     if triggered == "portal-logout-btn":
         auth_session = {"school": False, "govt": False, "role": "citizen", "school_udise": "", "school_name": ""}
         return (
             style_hidden, style_visible, "dashboard",
             "citizen", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn", "portal-tab-btn",
+            style_hidden, style_hidden, style_hidden,
             style_hidden, style_hidden, style_visible, style_visible,
             style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
             "", style_hidden, "", "", "", auth_session,
-            "Public Citizen View (Open Access)", {"display": "none"},
-            style_hidden
+            "Public Citizen View (Open Access)", style_hidden,
+            "PUBLIC CITIZEN VIEW", "status-pill status-pill-green",
+            style_hidden, style_flex, style_hidden
         )
 
     # 2. RETURN HOME (WELCOME PAGE)
@@ -2937,14 +2854,16 @@ def handle_navigation_and_auth(
         return (
             style_visible, style_hidden, "welcome",
             current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+            tab_cit_style, tab_sch_style, tab_gov_style,
             sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
             style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
             "", style_hidden, no_update, no_update, pending_role, auth_session,
             status_text, logout_style,
-            style_hidden
+            badge_text, badge_class,
+            style_hidden, style_flex, style_hidden
         )
 
-    # 3. DIRECT PUBLIC ACCESS
+    # 3. DIRECT PUBLIC ACCESS (Citizen View)
     if triggered in [
         "welcome-btn-enter-dashboard", "welcome-btn-hero-launch", "welcome-btn-hero-explore",
         "welcome-btn-bottom-enter", "welcome-btn-citizen",
@@ -2954,75 +2873,115 @@ def handle_navigation_and_auth(
         return (
             style_hidden, style_visible, "dashboard",
             "citizen", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn", "portal-tab-btn",
+            style_hidden, style_hidden, style_hidden,
             style_hidden, style_hidden, style_visible, style_visible,
             style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
             "", style_hidden, no_update, no_update, pending_role, auth_session,
-            "Public Citizen View (Open Access)", {"display": "none"},
-            style_hidden
+            "Public Citizen View (Open Access)", style_hidden,
+            "PUBLIC CITIZEN VIEW", "status-pill status-pill-green",
+            style_hidden, style_flex, style_hidden
         )
 
-    # 4. REQUEST SCHOOL PORTAL (FROM WELCOME OR DASHBOARD)
-    if triggered in ["welcome-btn-school", "portal-tab-school"]:
+    # 4. TOP-NAV "PORTAL LOGIN" BUTTON CLICKED -> Open modal in Role Selection mode (2 options)
+    if triggered == "nav-btn-portal-login":
+        return (
+            welcome_style, dashboard_style, current_page,
+            current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+            tab_cit_style, tab_sch_style, tab_gov_style,
+            sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
+            style_flex,
+            "Official Institutional Access Portal",
+            "Select your authority to proceed with authenticated portal clearance.",
+            "", "gov-ico gov-ico-lock", "OFFICIAL CLEARANCE",
+            "Choose Educational Institute or Government Authority above.",
+            "", style_hidden, "", "", "", auth_session,
+            status_text, logout_style,
+            badge_text, badge_class,
+            style_hidden,
+            style_flex,   # Show Role Chooser buttons
+            style_hidden  # Hide credentials form until a role is selected
+        )
+
+    # 5. USER CLICKS "EDUCATIONAL INSTITUTE" (FROM MODAL CHOOSER OR WELCOME TILE)
+    if triggered in ["btn-choose-login-school", "welcome-btn-school", "portal-tab-school"]:
         if auth_session.get("school"):
+            # Already authenticated: open strictly isolated School portal
             sch_label = auth_session.get("school_name", "Institution Administrator")
             return (
                 style_hidden, style_visible, "dashboard",
                 "school", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active", "portal-tab-btn",
+                style_hidden, style_hidden, style_hidden,
                 style_hidden, style_visible, style_hidden, style_hidden,
                 style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
                 "", style_hidden, "", "", "school", auth_session,
                 f"Logged in: {sch_label}", {"display": "inline-block"},
-                style_hidden
+                "INSTITUTION ASSESSMENT PORTAL", "status-pill status-pill-cyan",
+                style_hidden, style_flex, style_hidden
             )
         else:
+            # Show School credentials login form
             cfg = CREDENTIALS_CONFIG["school"]
             return (
                 welcome_style, dashboard_style, current_page,
                 current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+                tab_cit_style, tab_sch_style, tab_gov_style,
                 sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
                 style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
                 "", style_hidden, "school_admin", "school123", "school", auth_session,
                 status_text, logout_style,
-                {"display": "block", "marginBottom": "14px"}
+                badge_text, badge_class,
+                {"display": "block", "marginBottom": "14px"},
+                style_hidden,  # Hide chooser
+                style_visible  # Show credentials form
             )
 
-    # 5. REQUEST GOVERNMENT PORTAL (FROM WELCOME OR DASHBOARD)
-    if triggered in ["welcome-btn-govt", "portal-tab-govt"]:
+    # 6. USER CLICKS "GOVERNMENT AUTHORITY" (FROM MODAL CHOOSER OR WELCOME TILE)
+    if triggered in ["btn-choose-login-govt", "welcome-btn-govt", "portal-tab-govt"]:
         if auth_session.get("govt"):
+            # Already authenticated: open strictly isolated Government portal
             return (
                 style_hidden, style_visible, "dashboard",
                 "govt", "portal-tab-btn", "portal-tab-btn", "portal-tab-btn portal-tab-btn-active",
-                style_visible, style_hidden, style_visible, style_visible,
+                style_hidden, style_hidden, style_hidden,
+                style_visible, style_hidden, style_hidden, style_hidden,
                 style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
                 "", style_hidden, "", "", "govt", auth_session,
                 "Logged in: Government Official", {"display": "inline-block"},
-                style_hidden
+                "GOVERNMENT SCENARIO ANALYSIS", "status-pill status-pill-amber",
+                style_hidden, style_flex, style_hidden
             )
         else:
+            # Show Government credentials login form
             cfg = CREDENTIALS_CONFIG["govt"]
             return (
                 welcome_style, dashboard_style, current_page,
                 current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+                tab_cit_style, tab_sch_style, tab_gov_style,
                 sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
                 style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
                 "", style_hidden, "govt_admin", "govt123", "govt", auth_session,
                 status_text, logout_style,
-                style_hidden
+                badge_text, badge_class,
+                style_hidden,
+                style_hidden,  # Hide chooser
+                style_visible  # Show credentials form
             )
 
-    # 6. CANCEL AUTH MODAL
+    # 7. CANCEL AUTH MODAL
     if triggered == "auth-cancel-btn":
         return (
             welcome_style, dashboard_style, current_page,
             current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+            tab_cit_style, tab_sch_style, tab_gov_style,
             sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
             style_hidden, modal_title, modal_sub, modal_icon, modal_icon_cls, modal_badge, demo_hint,
             "", style_hidden, "", "", pending_role, auth_session,
             status_text, logout_style,
-            style_hidden
+            badge_text, badge_class,
+            style_hidden, style_flex, style_hidden
         )
 
-    # 7. SUBMIT AUTHENTICATION (SUBMIT BUTTON OR ENTER KEY)
+    # 8. SUBMIT AUTHENTICATION (SUBMIT BUTTON OR ENTER KEY)
     if triggered in ["auth-submit-btn", "auth-username-input", "auth-password-input"]:
         target_role = pending_role if pending_role in ["school", "govt"] else "school"
         cfg = CREDENTIALS_CONFIG[target_role]
@@ -3052,25 +3011,35 @@ def handle_navigation_and_auth(
                 auth_session["school_udise"] = str(sch_row["udise_code"])
                 auth_session["school_name"] = str(sch_row["school_name"])
                 new_status = f"Logged in: {sch_row['school_name']}"
+                new_sec_sch = style_visible
+                new_sec_gov = style_hidden
+                new_sec_dist = style_hidden
+                new_sec_map = style_hidden
+                new_badge_text = "INSTITUTION ASSESSMENT PORTAL"
+                new_badge_class = "status-pill status-pill-cyan"
             else:
                 new_status = "Logged in: Government Official"
+                new_sec_sch = style_hidden
+                new_sec_gov = style_visible
+                new_sec_dist = style_hidden
+                new_sec_map = style_hidden
+                new_badge_text = "GOVERNMENT SCENARIO ANALYSIS"
+                new_badge_class = "status-pill status-pill-amber"
 
             new_tab_cit = "portal-tab-btn"
             new_tab_sch = "portal-tab-btn portal-tab-btn-active" if new_portal == "school" else "portal-tab-btn"
             new_tab_gov = "portal-tab-btn portal-tab-btn-active" if new_portal == "govt" else "portal-tab-btn"
-            new_sec_sch = style_visible if new_portal == "school" else style_hidden
-            new_sec_gov = style_visible if new_portal == "govt" else style_hidden
-            new_sec_dist = style_hidden if new_portal == "school" else style_visible
-            new_sec_map = style_hidden if new_portal == "school" else style_visible
 
             return (
                 style_hidden, style_visible, "dashboard",
                 new_portal, new_tab_cit, new_tab_sch, new_tab_gov,
+                style_hidden, style_hidden, style_hidden,
                 new_sec_gov, new_sec_sch, new_sec_dist, new_sec_map,
                 style_hidden, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
                 "", style_hidden, "", "", target_role, auth_session,
                 new_status, {"display": "inline-block"},
-                style_hidden
+                new_badge_text, new_badge_class,
+                style_hidden, style_flex, style_hidden
             )
         else:
             err_text = f"Authentication Failed: Invalid {target_role.capitalize()} credentials. Check demo credentials below."
@@ -3078,11 +3047,15 @@ def handle_navigation_and_auth(
             return (
                 welcome_style, dashboard_style, current_page,
                 current_portal, tab_citizen_cls, tab_school_cls, tab_govt_cls,
+                tab_cit_style, tab_sch_style, tab_gov_style,
                 sec_govt_style, sec_school_style, sec_district_style, sec_map_dir_style,
                 style_flex, cfg["title"], cfg["subtitle"], cfg["icon"], cfg["icon_class"], cfg["badge"], cfg["hint"],
                 err_text, style_visible, no_update, "", target_role, auth_session,
                 status_text, logout_style,
-                school_grp_style
+                badge_text, badge_class,
+                school_grp_style,
+                style_hidden,
+                style_visible
             )
 
     return no_update
