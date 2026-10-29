@@ -30,4 +30,7 @@ Desktop.ini
 # Temporary outputs & reference archives
 *.tmp
 *.log
+*.zip
 teammate_reference/
+research_package/
+

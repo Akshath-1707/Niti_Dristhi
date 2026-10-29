@@ -13,7 +13,7 @@ import warnings
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from dash import Dash, dcc, html, dash_table, Input, Output, State, no_update
+from dash import Dash, dcc, html, dash_table, Input, Output, State, no_update, ALL, ctx
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -1186,6 +1186,37 @@ app.layout = html.Div(
                 # Dynamic Executive Infrastructure Intelligence Console
                 html.Div(id="govt-infra-intelligence-panel"),
 
+                # DISTRICT GEOSPATIAL GIS INFRASTRUCTURE MAP (GOVERNMENT PORTAL)
+                html.Div(
+                    className="executive-card",
+                    style={"marginTop": "20px", "border": f"1px solid {COLOR_BORDER}"},
+                    children=[
+                        html.Div(
+                            style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "12px", "flexWrap": "wrap", "gap": "10px"},
+                            children=[
+                                html.Div([
+                                    html.Span("GEOSPATIAL DECISION INTELLIGENCE • DISTRICT WARD MAPPING", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_GOVT_BLUE, "letterSpacing": "0.5px"}),
+                                    html.H3("District Geospatial Infrastructure GIS Map • Chhatrapati Sambhajinagar", style={"margin": "2px 0 0 0", "fontSize": "17px", "fontWeight": "800", "color": COLOR_PITCH}),
+                                    html.P("Geospatial distribution of institutions across municipal wards and URC clusters. Marker color reflects Priority Tier; marker radius scales with student enrollment. Click any pin to inspect the institution below.", style={"margin": "3px 0 0 0", "fontSize": "12.5px", "color": COLOR_MUTED})
+                                ]),
+                                html.Div(
+                                    style={"display": "flex", "alignItems": "center", "gap": "8px"},
+                                    children=[
+                                        html.Span(id="govt-map-school-count-badge", children=f"{len(df):,} Institutions Geospatially Plotted", className="status-pill status-pill-cyan"),
+                                        html.Span("ADMINISTRATIVE GIS ACTIVE", className="status-pill status-pill-green")
+                                    ]
+                                )
+                            ]
+                        ),
+                        dcc.Graph(
+                            id="govt-gis-infrastructure-map",
+                            figure=create_gis_infrastructure_map(df),
+                            config={"displayModeBar": True, "scrollZoom": True},
+                            style={"height": "460px", "minHeight": "460px", "width": "100%", "borderRadius": "8px", "overflow": "hidden", "border": f"1px solid {COLOR_BORDER}"}
+                        )
+                    ]
+                ),
+
                 # GOVERNMENT ADMINISTRATIVE SCHOOL INSPECTION & SEARCH DOSSIER
                 html.Div(
                     className="executive-card",
@@ -1606,7 +1637,7 @@ app.layout = html.Div(
                                 html.Div(
                                     style={"display": "flex", "alignItems": "center", "gap": "8px"},
                                     children=[
-                                        html.Span(id="map-school-count-badge", className="status-pill status-pill-cyan"),
+                                        html.Span(id="map-school-count-badge", children=f"{len(df):,} Institutions Geospatially Plotted", className="status-pill status-pill-cyan"),
                                         html.Span("GEOSPATIAL DIRECTORY", className="status-pill status-pill-green")
                                     ]
                                 )
@@ -1614,8 +1645,9 @@ app.layout = html.Div(
                         ),
                         dcc.Graph(
                             id="gis-infrastructure-map",
+                            figure=create_gis_infrastructure_map(df),
                             config={"displayModeBar": True, "scrollZoom": True},
-                            style={"borderRadius": "8px", "overflow": "hidden", "border": f"1px solid {COLOR_BORDER}"}
+                            style={"height": "460px", "minHeight": "460px", "width": "100%", "borderRadius": "8px", "overflow": "hidden", "border": f"1px solid {COLOR_BORDER}"}
                         )
                     ]
                 )
@@ -1744,6 +1776,8 @@ app.layout = html.Div(
     # GIS Infrastructure Map
     Output("gis-infrastructure-map", "figure"),
     Output("map-school-count-badge", "children"),
+    Output("govt-gis-infrastructure-map", "figure"),
+    Output("govt-map-school-count-badge", "children"),
     # Search Dossier & Govt Intelligence
     Output("facility-inspector-container", "children"),
     Output("govt-infra-intelligence-panel", "children"),
@@ -1757,9 +1791,10 @@ app.layout = html.Div(
     Input("sim-w-equity", "value"),
     Input("sim-w-promo", "value"),
     Input("sim-w-ret", "value"),
-    Input("sim-w-cap", "value")
+    Input("sim-w-cap", "value"),
+    Input("active-portal-store", "data")
 )
-def update_entire_dashboard(selected_block, selected_cat, selected_tier, search_query, horizon_year, sim_classrooms, w_eq, w_pr, w_ret, w_cap):
+def update_entire_dashboard(selected_block, selected_cat, selected_tier, search_query, horizon_year, sim_classrooms, w_eq, w_pr, w_ret, w_cap, active_portal=None):
     filtered = df.copy()
 
     if selected_block and selected_block != "ALL" and "block_name" in filtered.columns:
@@ -2183,6 +2218,394 @@ def update_entire_dashboard(selected_block, selected_cat, selected_tier, search_
         filtered_df=filtered
     )
 
+    # ---------------------------------------------------------------------------
+    # SEPARATED BEST AND WORST PERFORMING SCHOOLS BENCHMARK (GOVT PORTAL)
+    # ---------------------------------------------------------------------------
+    perf_df = filtered.copy()
+    if "is_operational" in perf_df.columns:
+        op_schools = perf_df[perf_df["is_operational"] == True]
+        if not op_schools.empty:
+            perf_df = op_schools
+
+    if "total_enrolment" in perf_df.columns:
+        with_enrol = perf_df[perf_df["total_enrolment"] > 0]
+        if not with_enrol.empty:
+            perf_df = with_enrol
+
+    if "school_name" in perf_df.columns:
+        perf_df["clean_name"] = (
+            perf_df["school_name"].astype(str)
+            .str.replace("\t", " ")
+            .str.replace("\r", "")
+            .str.replace("\n", "")
+            .str.replace("_x000D_", "")
+            .str.strip()
+        )
+    else:
+        perf_df["clean_name"] = perf_df["udise_code"].astype(str)
+
+    # Dynamic composite score using simulation priority weights
+    tot_w = max(0.001, float(w_eq) + float(w_pr) + float(w_ret) + float(w_cap))
+    norm_w_eq = float(w_eq) / tot_w
+    norm_w_pr = float(w_pr) / tot_w
+    norm_w_ret = float(w_ret) / tot_w
+    norm_w_cap = float(w_cap) / tot_w
+
+    if all(c in perf_df.columns for c in ["score_equity", "score_promotion", "score_retention", "score_capacity"]):
+        perf_df["eval_score"] = (
+            perf_df["score_equity"] * norm_w_eq +
+            perf_df["score_promotion"] * norm_w_pr +
+            perf_df["score_retention"] * norm_w_ret +
+            perf_df["score_capacity"] * norm_w_cap
+        ).round(1)
+    else:
+        perf_df["eval_score"] = perf_df["readiness_score"].round(1)
+
+    top_n = min(5, len(perf_df)) if len(perf_df) > 0 else 0
+    top_df = perf_df.sort_values(by="eval_score", ascending=False).head(top_n).copy() if top_n > 0 else pd.DataFrame()
+    bottom_df = perf_df.sort_values(by="eval_score", ascending=True).head(top_n).copy() if top_n > 0 else pd.DataFrame()
+
+    # --- Best Performing Institutions Chart ---
+    if not top_df.empty:
+        top_chart_df = top_df.iloc[::-1]
+        y_labels_top = [(n[:24] + "..." if len(n) > 24 else n) for n in top_chart_df["clean_name"]]
+        fig_best = go.Figure(go.Bar(
+            x=top_chart_df["eval_score"],
+            y=y_labels_top,
+            orientation="h",
+            text=[f" {s:.1f}%" for s in top_chart_df["eval_score"]],
+            textposition="inside",
+            insidetextanchor="end",
+            marker=dict(
+                color=top_chart_df["eval_score"],
+                colorscale=[[0, "#2E7D32"], [1, "#059669"]],
+                line=dict(color="#1B5E20", width=1)
+            ),
+            customdata=top_chart_df[["udise_code", "clean_name", "block_name", "total_enrolment", "promotion_rate"]],
+            hovertemplate=(
+                "<b>%{customdata[1]}</b><br>"
+                "UDISE: %{customdata[0]}<br>"
+                "Block: %{customdata[2]}<br>"
+                "Readiness Score: <b>%{x:.1f}%</b><br>"
+                "Pass Rate: %{customdata[4]}%<br>"
+                "Total Enrolment: %{customdata[3]:,}<extra></extra>"
+            )
+        ))
+        fig_best.update_layout(
+            margin=dict(l=10, r=20, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter, sans-serif", size=11, color=COLOR_PITCH),
+            xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#E2E8F0", ticksuffix="%"),
+            yaxis=dict(showgrid=False),
+            height=200
+        )
+        avg_top_score = round(float(top_df["eval_score"].mean()), 1)
+        avg_top_promo = round(float(top_df["promotion_rate"].mean()), 1) if "promotion_rate" in top_df.columns else 100.0
+        tot_top_enrol = int(top_df["total_enrolment"].sum()) if "total_enrolment" in top_df.columns else 0
+    else:
+        fig_best = go.Figure()
+        avg_top_score, avg_top_promo, tot_top_enrol = 0.0, 0.0, 0
+
+    # --- Worst Performing Institutions Chart ---
+    if not bottom_df.empty:
+        bottom_chart_df = bottom_df.iloc[::-1]
+        y_labels_bottom = [(n[:24] + "..." if len(n) > 24 else n) for n in bottom_chart_df["clean_name"]]
+        fig_worst = go.Figure(go.Bar(
+            x=bottom_chart_df["eval_score"],
+            y=y_labels_bottom,
+            orientation="h",
+            text=[f" {s:.1f}%" for s in bottom_chart_df["eval_score"]],
+            textposition="inside",
+            insidetextanchor="end",
+            marker=dict(
+                color=bottom_chart_df["eval_score"],
+                colorscale=[[0, "#B3261E"], [1, "#EF4444"]],
+                line=dict(color="#7F1D1D", width=1)
+            ),
+            customdata=bottom_chart_df[["udise_code", "clean_name", "block_name", "total_enrolment", "promotion_rate"]],
+            hovertemplate=(
+                "<b>%{customdata[1]}</b><br>"
+                "UDISE: %{customdata[0]}<br>"
+                "Block: %{customdata[2]}<br>"
+                "Readiness Score: <b>%{x:.1f}%</b><br>"
+                "Pass Rate: %{customdata[4]}%<br>"
+                "Total Enrolment: %{customdata[3]:,}<extra></extra>"
+            )
+        ))
+        fig_worst.update_layout(
+            margin=dict(l=10, r=20, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter, sans-serif", size=11, color=COLOR_PITCH),
+            xaxis=dict(range=[0, 105], showgrid=True, gridcolor="#E2E8F0", ticksuffix="%"),
+            yaxis=dict(showgrid=False),
+            height=200
+        )
+        avg_bottom_score = round(float(bottom_df["eval_score"].mean()), 1)
+        tot_bottom_pending = int(bottom_df["pending_students"].sum()) if "pending_students" in bottom_df.columns else 0
+        avg_bottom_promo = round(float(bottom_df["promotion_rate"].mean()), 1) if "promotion_rate" in bottom_df.columns else 0.0
+    else:
+        fig_worst = go.Figure()
+        avg_bottom_score, tot_bottom_pending, avg_bottom_promo = 0.0, 0, 0.0
+
+    # Best school cards
+    best_cards = []
+    for rank, (_, row) in enumerate(top_df.iterrows(), start=1):
+        sch_name = str(row["clean_name"])
+        u_code = str(row["udise_code"])
+        blk = str(row.get("block_name", "Urban"))
+        enrol = int(row.get("total_enrolment", 0))
+        promo = float(row.get("promotion_rate", 100.0))
+        sc = float(row["eval_score"])
+        best_cards.append(
+            html.Div(
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between",
+                    "alignItems": "center",
+                    "padding": "9px 12px",
+                    "backgroundColor": "#FFFFFF",
+                    "borderRadius": "6px",
+                    "border": "1px solid #C8E6C9",
+                    "marginBottom": "8px"
+                },
+                children=[
+                    html.Div(
+                        style={"flex": "1", "minWidth": "0", "marginRight": "8px"},
+                        children=[
+                            html.Div(
+                                style={"display": "flex", "alignItems": "center", "gap": "6px", "marginBottom": "2px"},
+                                children=[
+                                    html.Span(f"#{rank}", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_SUCCESS, "backgroundColor": "#E8F5E9", "padding": "1px 6px", "borderRadius": "4px", "flexShrink": 0}),
+                                    html.Span(sch_name, style={"fontSize": "12px", "fontWeight": "700", "color": COLOR_PITCH, "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap"}, title=sch_name)
+                                ]
+                            ),
+                            html.Div(
+                                style={"fontSize": "11px", "color": COLOR_MUTED, "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap"},
+                                children=f"UDISE: {u_code} • {blk} • Enrolment: {enrol:,} • Pass: {promo:.1f}%"
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        style={"display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": 0},
+                        children=[
+                            html.Div(
+                                style={"textAlign": "right"},
+                                children=[
+                                    html.Span(f"{sc:.1f}%", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_SUCCESS, "display": "block", "lineHeight": "1.1"}),
+                                    html.Span("Readiness", style={"fontSize": "9px", "color": COLOR_MUTED, "textTransform": "uppercase", "letterSpacing": "0.3px"})
+                                ]
+                            ),
+                            html.Button(
+                                "Inspect",
+                                id={"type": "govt-school-select", "udise": u_code},
+                                n_clicks=0,
+                                className="btn-outline",
+                                style={"fontSize": "11px", "padding": "4px 8px", "height": "26px", "lineHeight": "1", "whiteSpace": "nowrap", "borderColor": "#A5D6A7", "color": COLOR_SUCCESS}
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+
+    # Worst school cards
+    worst_cards = []
+    for rank, (_, row) in enumerate(bottom_df.iterrows(), start=1):
+        sch_name = str(row["clean_name"])
+        u_code = str(row["udise_code"])
+        blk = str(row.get("block_name", "Urban"))
+        enrol = int(row.get("total_enrolment", 0))
+        promo = float(row.get("promotion_rate", 0.0))
+        pending = int(row.get("pending_students", 0))
+        sc = float(row["eval_score"])
+        worst_cards.append(
+            html.Div(
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between",
+                    "alignItems": "center",
+                    "padding": "9px 12px",
+                    "backgroundColor": "#FFFFFF",
+                    "borderRadius": "6px",
+                    "border": "1px solid #FFCDD2",
+                    "marginBottom": "8px"
+                },
+                children=[
+                    html.Div(
+                        style={"flex": "1", "minWidth": "0", "marginRight": "8px"},
+                        children=[
+                            html.Div(
+                                style={"display": "flex", "alignItems": "center", "gap": "6px", "marginBottom": "2px"},
+                                children=[
+                                    html.Span(f"#{rank}", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_DANGER, "backgroundColor": "#FFEBEE", "padding": "1px 6px", "borderRadius": "4px", "flexShrink": 0}),
+                                    html.Span(sch_name, style={"fontSize": "12px", "fontWeight": "700", "color": COLOR_PITCH, "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap"}, title=sch_name)
+                                ]
+                            ),
+                            html.Div(
+                                style={"fontSize": "11px", "color": COLOR_MUTED, "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap"},
+                                children=f"UDISE: {u_code} • {blk} • Enrolment: {enrol:,} • Remedial: {pending:,}"
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        style={"display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": 0},
+                        children=[
+                            html.Div(
+                                style={"textAlign": "right"},
+                                children=[
+                                    html.Span(f"{sc:.1f}%", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_DANGER, "display": "block", "lineHeight": "1.1"}),
+                                    html.Span("Readiness", style={"fontSize": "9px", "color": COLOR_MUTED, "textTransform": "uppercase", "letterSpacing": "0.3px"})
+                                ]
+                            ),
+                            html.Button(
+                                "Inspect",
+                                id={"type": "govt-school-select", "udise": u_code},
+                                n_clicks=0,
+                                className="btn-outline",
+                                style={"fontSize": "11px", "padding": "4px 8px", "height": "26px", "lineHeight": "1", "whiteSpace": "nowrap", "borderColor": "#EF9A9A", "color": COLOR_DANGER}
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+
+    # Master Comparative Container (Completely Separated)
+    govt_perf_benchmark_section = html.Div(
+        style={"marginTop": "20px"},
+        children=[
+            # Section Header
+            html.Div(
+                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "12px", "flexWrap": "wrap", "gap": "10px"},
+                children=[
+                    html.Div([
+                        html.Span("OFFICIAL BENCHMARK DISPARITY ANALYSIS (ISOLATED FIELDS)", style={"fontSize": "11px", "fontWeight": "800", "color": COLOR_GOVT_BLUE, "letterSpacing": "0.5px"}),
+                        html.H4("District Institutional Performance Disparity: Top Benchmarks vs. Priority Intervention Schools", style={"margin": "2px 0 0 0", "fontSize": "15px", "fontWeight": "700", "color": COLOR_PITCH}),
+                        html.P("Comparative evaluation strictly separated into top-performing leaders and acute critical-priority schools. Click any bar or 'Inspect' button to load the full dossier below.", style={"margin": "2px 0 0 0", "fontSize": "12px", "color": COLOR_MUTED})
+                    ]),
+                    html.Div(style={"display": "flex", "gap": "8px"}, children=[
+                        html.Span("STRICTLY ISOLATED FIELDS", className="status-pill status-pill-cyan"),
+                        html.Span(f"TOP/BOTTOM {top_n} INSTITUTIONS", className="status-pill status-pill-amber")
+                    ])
+                ]
+            ),
+            # Dual Grid: Strictly Separated
+            html.Div(
+                style={"display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "16px"},
+                children=[
+                    # PANEL 1: BEST PERFORMING INSTITUTIONS (GREEN THEME)
+                    html.Div(
+                        style={"backgroundColor": "#F0FDF4", "border": "1.5px solid #BBF7D0", "borderRadius": "8px", "padding": "16px", "boxShadow": "0 1px 3px rgba(0,0,0,0.04)"},
+                        children=[
+                            html.Div(
+                                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "10px"},
+                                children=[
+                                    html.Div([
+                                        html.Span("EXCELLENCE BENCHMARK", style={"fontSize": "10.5px", "fontWeight": "800", "color": "#15803D", "letterSpacing": "0.5px"}),
+                                        html.H5("Top Performing Institutions (Benchmark Leaders)", style={"margin": "2px 0 0 0", "fontSize": "14px", "fontWeight": "700", "color": "#14532D"})
+                                    ]),
+                                    html.Span("TIER 3 OPTIMAL", className="status-pill status-pill-green")
+                                ]
+                            ),
+                            # 3 Mini KPIs
+                            html.Div(
+                                style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "8px", "marginBottom": "12px"},
+                                children=[
+                                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "8px 10px", "borderRadius": "6px", "border": "1px solid #DCFCE7", "textAlign": "center"}, children=[
+                                        html.Span("Avg Top Score", style={"fontSize": "10px", "color": COLOR_MUTED, "display": "block"}),
+                                        html.Span(f"{avg_top_score:.1f}%", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_SUCCESS})
+                                    ]),
+                                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "8px 10px", "borderRadius": "6px", "border": "1px solid #DCFCE7", "textAlign": "center"}, children=[
+                                        html.Span("Avg Pass Rate", style={"fontSize": "10px", "color": COLOR_MUTED, "display": "block"}),
+                                        html.Span(f"{avg_top_promo:.1f}%", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_SUCCESS})
+                                    ]),
+                                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "8px 10px", "borderRadius": "6px", "border": "1px solid #DCFCE7", "textAlign": "center"}, children=[
+                                        html.Span("Enrolled Cohort", style={"fontSize": "10px", "color": COLOR_MUTED, "display": "block"}),
+                                        html.Span(f"{tot_top_enrol:,}", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_PINE})
+                                    ])
+                                ]
+                            ),
+                            # Chart
+                            html.Div(
+                                style={"backgroundColor": "#FFFFFF", "borderRadius": "6px", "padding": "8px", "border": "1px solid #DCFCE7", "marginBottom": "12px"},
+                                children=[
+                                    html.Span("COMPOSITE READINESS INDEX (TOP 5)", style={"fontSize": "10px", "fontWeight": "700", "color": COLOR_MUTED, "letterSpacing": "0.4px", "display": "block", "marginBottom": "4px"}),
+                                    dcc.Graph(id="best-schools-chart", figure=fig_best, config={"displayModeBar": False})
+                                ]
+                            ),
+                            # School List Cards
+                            html.Span("INSTITUTIONAL BENCHMARK DOSSIER LIST", style={"fontSize": "10px", "fontWeight": "700", "color": COLOR_MUTED, "letterSpacing": "0.4px", "display": "block", "marginBottom": "8px"}),
+                            html.Div(children=best_cards),
+                            # Directive Footer
+                            html.Div(
+                                style={"backgroundColor": "#DCFCE7", "borderRadius": "6px", "padding": "8px 10px", "marginTop": "10px", "fontSize": "11.5px", "color": "#14532D"},
+                                children=[
+                                    html.Strong("Best Practice Protocol: "),
+                                    html.Span("Designate top institutions as peer mentor centers for cluster-wide pedagogical support.")
+                                ]
+                            )
+                        ]
+                    ),
+                    # PANEL 2: WORST PERFORMING INSTITUTIONS (CRIMSON THEME)
+                    html.Div(
+                        style={"backgroundColor": "#FEF2F2", "border": "1.5px solid #FECACA", "borderRadius": "8px", "padding": "16px", "boxShadow": "0 1px 3px rgba(0,0,0,0.04)"},
+                        children=[
+                            html.Div(
+                                style={"display": "flex", "justifyContent": "space-between", "alignItems": "center", "marginBottom": "10px"},
+                                children=[
+                                    html.Div([
+                                        html.Span("PRIORITY INTERVENTION REQUIRED", style={"fontSize": "10.5px", "fontWeight": "800", "color": "#B91C1C", "letterSpacing": "0.5px"}),
+                                        html.H5("Critical Priority Institutions (Acute Deficits)", style={"margin": "2px 0 0 0", "fontSize": "14px", "fontWeight": "700", "color": "#7F1D1D"})
+                                    ]),
+                                    html.Span("TIER 1 CRITICAL", style={"backgroundColor": "#FEE2E2", "color": "#B91C1C", "border": "1px solid #FCA5A5", "borderRadius": "12px", "padding": "3px 9px", "fontSize": "11px", "fontWeight": "700"})
+                                ]
+                            ),
+                            # 3 Mini KPIs
+                            html.Div(
+                                style={"display": "grid", "gridTemplateColumns": "repeat(3, 1fr)", "gap": "8px", "marginBottom": "12px"},
+                                children=[
+                                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "8px 10px", "borderRadius": "6px", "border": "1px solid #FEE2E2", "textAlign": "center"}, children=[
+                                        html.Span("Lowest Score", style={"fontSize": "10px", "color": COLOR_MUTED, "display": "block"}),
+                                        html.Span(f"{avg_bottom_score:.1f}%", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_DANGER})
+                                    ]),
+                                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "8px 10px", "borderRadius": "6px", "border": "1px solid #FEE2E2", "textAlign": "center"}, children=[
+                                        html.Span("Remedial At-Risk", style={"fontSize": "10px", "color": COLOR_MUTED, "display": "block"}),
+                                        html.Span(f"{tot_bottom_pending:,}", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_DANGER})
+                                    ]),
+                                    html.Div(style={"backgroundColor": "#FFFFFF", "padding": "8px 10px", "borderRadius": "6px", "border": "1px solid #FEE2E2", "textAlign": "center"}, children=[
+                                        html.Span("Avg Pass Rate", style={"fontSize": "10px", "color": COLOR_MUTED, "display": "block"}),
+                                        html.Span(f"{avg_bottom_promo:.1f}%", style={"fontSize": "14px", "fontWeight": "800", "color": COLOR_WARNING})
+                                    ])
+                                ]
+                            ),
+                            # Chart
+                            html.Div(
+                                style={"backgroundColor": "#FFFFFF", "borderRadius": "6px", "padding": "8px", "border": "1px solid #FEE2E2", "marginBottom": "12px"},
+                                children=[
+                                    html.Span("COMPOSITE READINESS DEFICIT (LOWEST 5)", style={"fontSize": "10px", "fontWeight": "700", "color": COLOR_MUTED, "letterSpacing": "0.4px", "display": "block", "marginBottom": "4px"}),
+                                    dcc.Graph(id="worst-schools-chart", figure=fig_worst, config={"displayModeBar": False})
+                                ]
+                            ),
+                            # School List Cards
+                            html.Span("CRITICAL ACTION DOSSIER LIST", style={"fontSize": "10px", "fontWeight": "700", "color": COLOR_MUTED, "letterSpacing": "0.4px", "display": "block", "marginBottom": "8px"}),
+                            html.Div(children=worst_cards),
+                            # Directive Footer
+                            html.Div(
+                                style={"backgroundColor": "#FEE2E2", "borderRadius": "6px", "padding": "8px 10px", "marginTop": "10px", "fontSize": "11.5px", "color": "#7F1D1D"},
+                                children=[
+                                    html.Strong("Statutory Directive: "),
+                                    html.Span("Deploy immediate remedial tutors and schedule infrastructure capacity inspection.")
+                                ]
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    )
+
     govt_infra_panel = html.Div(
         style={"backgroundColor": "#FFFFFF", "border": f"1px solid {COLOR_BORDER}", "borderRadius": "8px", "padding": "16px", "marginTop": "4px"},
         children=[
@@ -2248,7 +2671,9 @@ def update_entire_dashboard(selected_block, selected_cat, selected_tier, search_
                     html.Span("RECOMMENDED INFRASTRUCTURE DIRECTIVE: ", style={"fontSize": "11.5px", "fontWeight": "800", "color": COLOR_PITCH}),
                     html.Span(sim_res["recommended_intervention"], style={"fontSize": "12px", "color": COLOR_PITCH})
                 ]
-            )
+            ),
+            # Completely Separated Best vs. Worst Performing Schools Benchmarking Module
+            govt_perf_benchmark_section
         ]
     )
 
@@ -2258,6 +2683,7 @@ def update_entire_dashboard(selected_block, selected_cat, selected_tier, search_
         kpi_total, kpi_total_sub,
         kpi_remedial, kpi_deficit,
         funnel_fig, forecast_fig, scatter_fig, radar_fig,
+        gis_map_fig, map_badge,
         gis_map_fig, map_badge,
         inspector_card,
         govt_infra_panel
@@ -2291,6 +2717,69 @@ def handle_map_pin_click(click_data):
         if not matched.empty:
             return str(matched.iloc[0]["udise_code"])
         return str(point["hovertext"])
+    return no_update
+
+
+@app.callback(
+    Output("school-search-input", "value", allow_duplicate=True),
+    Input("govt-gis-infrastructure-map", "clickData"),
+    prevent_initial_call=True
+)
+def handle_govt_map_pin_click(click_data):
+    if not click_data or "points" not in click_data or not click_data["points"]:
+        return no_update
+    point = click_data["points"][0]
+    if "customdata" in point and point["customdata"]:
+        udise = str(point["customdata"][0])
+        return udise
+    elif "hovertext" in point and point["hovertext"]:
+        h_text = str(point["hovertext"]).strip().lower()
+        matched = df[df["school_name"].astype(str).str.lower() == h_text]
+        if not matched.empty:
+            return str(matched.iloc[0]["udise_code"])
+        return str(point["hovertext"])
+    return no_update
+
+
+@app.callback(
+    Output("school-search-input", "value", allow_duplicate=True),
+    Input("best-schools-chart", "clickData"),
+    prevent_initial_call=True
+)
+def handle_best_schools_chart_click(click_data):
+    if not click_data or "points" not in click_data or not click_data["points"]:
+        return no_update
+    point = click_data["points"][0]
+    if "customdata" in point and point["customdata"]:
+        return str(point["customdata"][0])
+    return no_update
+
+
+@app.callback(
+    Output("school-search-input", "value", allow_duplicate=True),
+    Input("worst-schools-chart", "clickData"),
+    prevent_initial_call=True
+)
+def handle_worst_schools_chart_click(click_data):
+    if not click_data or "points" not in click_data or not click_data["points"]:
+        return no_update
+    point = click_data["points"][0]
+    if "customdata" in point and point["customdata"]:
+        return str(point["customdata"][0])
+    return no_update
+
+
+@app.callback(
+    Output("school-search-input", "value", allow_duplicate=True),
+    Input({"type": "govt-school-select", "udise": ALL}, "n_clicks"),
+    prevent_initial_call=True
+)
+def handle_govt_school_card_select(n_clicks_list):
+    if not ctx.triggered:
+        return no_update
+    trig_id = ctx.triggered_id
+    if isinstance(trig_id, dict) and "udise" in trig_id:
+        return str(trig_id["udise"])
     return no_update
 
 
